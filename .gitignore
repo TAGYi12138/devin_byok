@@ -1,0 +1,47 @@
+# VS Code Extension Build Artifacts
+*.vsix
+*.vsixmanifest
+
+# Backup directories
+.backup/
+.tmp/
+.tmp-a8-inspect/
+backup-*
+host-backup-*
+archive/
+
+# Temporary files
+*.log
+*.bak-*
+
+# RAR archives
+*.rar
+
+# Node modules (if any)
+node_modules/
+
+# IDE specific
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Devin specific
+crash-bundles/
+cloud-gateway/
+packaging/
+redesign/
+stage/
+tools/
+analysis/
+extension/media/
+extension/scripts/
+extension/server/
+extension/crash-diagnostics.js
+extension/native-picker-install.cjs
+extension/native-picker-patch.cjs
+extension/ssh-remote-support.cjs

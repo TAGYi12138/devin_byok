@@ -1,0 +1,41 @@
+Copyright (c) 2026 xy-dev. All rights reserved.
+
+1. Grant of License
+   You are granted a limited, non-exclusive, non-transferable, revocable license
+   to use this software solely for personal, non-commercial purposes. You may
+   install and run the software in its original, unmodified form.
+
+2. Restrictions
+   You may NOT, without prior written permission from the copyright holder:
+   a) Modify, adapt, alter, translate, or create derivative works based on this
+      software, in whole or in part;
+   b) Reverse engineer, decompile, disassemble, or otherwise attempt to derive
+      the source code of this software (except to the extent applicable law
+      expressly permits);
+   c) Redistribute, sublicense, rent, lease, lend, sell, or otherwise transfer
+      this software or any copy thereof to any third party;
+   d) Remove, alter, or obscure any copyright notices, trademarks, or other
+      proprietary notices contained in this software;
+   e) Use this software, in whole or in part, as the basis for creating a
+      competing product or service.
+
+3. Intellectual Property
+   All intellectual property rights in and to this software, including but not
+   limited to copyrights, patents, trademarks, and trade secrets, are and shall
+   remain the exclusive property of the copyright holder.
+
+4. Termination
+   This license is effective until terminated. It will terminate automatically
+   without notice if you fail to comply with any term of this license. Upon
+   termination, you must destroy all copies of this software in your possession.
+
+5. Disclaimer of Warranty
+   THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+6. Limitation of Liability
+   IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR
+   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+   IN THE SOFTWARE.

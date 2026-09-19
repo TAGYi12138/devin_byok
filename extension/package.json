@@ -1,0 +1,128 @@
+{
+	"name": "devin-byok-bridge",
+	"displayName": "Devin BYOK Bridge",
+	"description": "Devin BYOK Bridge（自用版）- 把模型请求路由到你自己的 OpenAI 兼容或 Anthropic 原生 API 供应商（已移除在线更新）",
+	"version": "1.0.106",
+	"publisher": "byok-dev",
+	"engines": {
+		"vscode": "^1.85.0"
+	},
+	"main": "./extension.js",
+	"extensionKind": [
+		"ui"
+	],
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"categories": [
+		"Other"
+	],
+	"icon": "media/logo.png",
+	"scripts": {
+		"check:patch": "node scripts/check-patch-syntax.js",
+		"check:code": "node scripts/check-code-integrity.js",
+		"package": "node scripts/package.js"
+	},
+	"dependencies": {
+		"node-forge": "^1.3.1"
+	},
+	"devDependencies": {
+		"esbuild": "^0.25.0",
+		"javascript-obfuscator": "^4.1.1",
+		"sharp": "^0.34.5"
+	},
+	"contributes": {
+		"configuration": {
+			"title": "Devin BYOK Bridge",
+			"properties": {
+				"byokBridge.ssh.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "在 Remote SSH 窗口中配置 Linux 远端到本机 6778 的安全回环通道。"
+				},
+				"byokBridge.ssh.remotePort": {
+					"type": "integer",
+					"default": 16778,
+					"minimum": 1024,
+					"maximum": 65535,
+					"description": "Linux 远端用于连接本机 BYOK 代理的回环端口。修改后需重新连接 SSH。"
+				},
+				"byokBridge.ssh.remoteCaPath": {
+					"type": "string",
+					"default": "",
+					"description": "Linux 远端 CA 公共证书路径。留空时根据远端工作区路径推断用户主目录。"
+				},
+				"byokBridge.ssh.remoteAcpRegistryPath": {
+					"type": "string",
+					"default": "",
+					"description": "Linux 远端 ACP 注册表路径。留空时使用 ~/.devin-server-next/data/User/acp/registry.json。"
+				}
+			}
+		},
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "byokBridge",
+					"title": "Devin BYOK Bridge",
+					"icon": "media/logo.svg"
+				}
+			]
+		},
+		"views": {
+			"byokBridge": [
+				{
+					"type": "webview",
+					"id": "byokBridge.panel",
+					"name": "中转接入面板",
+					"contextualTitle": "Devin BYOK Bridge"
+				}
+			]
+		},
+		"commands": [
+			{
+				"command": "byokBridge.openPanel",
+				"title": "Devin BYOK Bridge: 打开控制面板"
+			},
+			{
+				"command": "byokBridge.refreshLocalModels",
+				"title": "Devin BYOK Local: 刷新原生模型列表"
+			},
+			{
+				"command": "byokBridge.showOutput",
+				"title": "Devin BYOK Bridge: 显示输出日志"
+			},
+			{
+				"command": "byokBridge.showCrashDiagnostics",
+				"title": "Devin BYOK Bridge: 显示崩溃诊断日志"
+			},
+			{
+				"command": "byokBridge.showLocalOutput",
+				"title": "Devin BYOK Local: 显示输出日志"
+			},
+			{
+				"command": "byokBridge.fullStopLocal",
+				"title": "Devin BYOK Local: 完全停止（6778）"
+			},
+			{
+				"command": "byokBridge.fullStopCascade",
+				"title": "Devin BYOK Cascade: 完全停止（6678）"
+			},
+			{
+				"command": "byokBridge.configureSsh",
+				"title": "Devin BYOK Bridge: 配置当前 SSH 主机"
+			},
+			{
+				"command": "byokBridge.removeSsh",
+				"title": "Devin BYOK Bridge: 移除当前 SSH 主机配置"
+			},
+			{
+				"command": "byokBridge.installPatch",
+				"title": "Devin BYOK Bridge: 安装补丁"
+			},
+			{
+				"command": "byokBridge.uninstallPatch",
+				"title": "Devin BYOK Bridge: 卸载补丁"
+			}
+		]
+	}
+}
