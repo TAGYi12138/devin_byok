@@ -1,0 +1,7 @@
+{
+  "id": "bundled-vision-win32-x64",
+  "platform": "win32",
+  "arch": "x64",
+  "downloadEnabled": false,
+  "files": []
+}

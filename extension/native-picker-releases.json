@@ -1,0 +1,232 @@
+[
+  {
+    "id": "stable-3.11.238",
+    "channel": "stable",
+    "build": "3.11.238",
+    "commit": "9e593c73d4ca24802eb3b302035f33cedad59802",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_STABLE_238",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_STABLE_238"
+    }
+  },
+  {
+    "id": "stable-3.11.235",
+    "channel": "stable",
+    "build": "3.11.235",
+    "commit": "e76e2288c52d658687e9c5df97618b026e471f9c",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_STABLE_311",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_STABLE_311"
+    }
+  },
+  {
+    "id": "stable-3.11.234",
+    "channel": "stable",
+    "build": "3.11.234",
+    "commit": "92c83011d1139eee53ac0629125938d536d4cd9c",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_STABLE_311",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_STABLE_311"
+    }
+  },
+  {
+    "id": "stable-3.11.231",
+    "channel": "stable",
+    "build": "3.11.231",
+    "commit": "0dd6265a2257b3ac3a2ba80eb70b66b7a37d7079",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_STABLE_311",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_STABLE_311"
+    }
+  },
+  {
+    "id": "stable-3.11.228",
+    "channel": "stable",
+    "build": "3.11.228",
+    "commit": "053434014dbdb7a662a14e38752946a0dafb97f2",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_NEXT_311",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_NEXT_311"
+    }
+  },
+  {
+    "id": "stable-3.11.216",
+    "channel": "stable",
+    "build": "3.11.216",
+    "commit": "d70b4713dfeaf856a4d8a35b35eac0c86e07af07",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_CC50A3E5DB5F",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_NEXT_311"
+    }
+  },
+  {
+    "id": "stable-3.11.212",
+    "channel": "stable",
+    "build": "3.11.212",
+    "commit": "75ee16a8b1727eacf044a4ad4996e12ee4117071",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_B535FF3DEC8E",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_RELEASE_67C190AD8778"
+    }
+  },
+  {
+    "id": "stable-3.10.67",
+    "channel": "stable",
+    "build": "3.10.67",
+    "commit": "0b186d6e13a1a48a46430c51fe414dd0747d46f6",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_1CD374062A2A",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_RELEASE_FF2CEF75DFB6"
+    }
+  },
+  {
+    "id": "stable-3.10.48",
+    "channel": "stable",
+    "build": "3.10.48",
+    "commit": "fcf7ba39e6150055fad817f8716385b4d320d46d",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_7755B8C13923",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_RELEASE_42A46543BC34"
+    }
+  },
+  {
+    "id": "stable-3.10.35",
+    "channel": "stable",
+    "build": "3.10.35",
+    "commit": "dfa4a2d639b8a05ab72387c12f1aafca1b4c3cb9",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_E5612EDAC16B",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_RELEASE_BA4ECF0DFC9E"
+    }
+  },
+  {
+    "id": "stable-3.10.31",
+    "channel": "stable",
+    "build": "3.10.31",
+    "commit": "b98cc43128712ba73c60cca73876f58a710aaa27",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_86774CB5A111",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_RELEASE_57566D9AFFE8"
+    }
+  },
+  {
+    "id": "stable-3.10.27",
+    "channel": "stable",
+    "build": "3.10.27",
+    "commit": "bcbe88c734e882c54479decce8c34eabc9f8f8b0",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_8F85EBC297AC",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_RELEASE_BF7A3CCFACE3"
+    }
+  },
+  {
+    "id": "stable-3.10.23",
+    "channel": "stable",
+    "build": "3.10.23",
+    "commit": "deb816008be02bf5f9da707b7def3ebdb53a51cd",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_27AE367A859F",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_RELEASE_047CC617A908"
+    }
+  },
+  {
+    "id": "next-3.11.1238",
+    "channel": "next",
+    "build": "3.11.1238",
+    "commit": "9e593c73d4ca24802eb3b302035f33cedad59802",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_STABLE_238",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_STABLE_238"
+    }
+  },
+  {
+    "id": "next-3.11.1234",
+    "channel": "next",
+    "build": "3.11.1234",
+    "commit": "92c83011d1139eee53ac0629125938d536d4cd9c",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_STABLE_311",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_STABLE_311"
+    }
+  },
+  {
+    "id": "next-3.11.1231",
+    "channel": "next",
+    "build": "3.11.1231",
+    "commit": "0dd6265a2257b3ac3a2ba80eb70b66b7a37d7079",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_STABLE_311",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_STABLE_311"
+    }
+  },
+  {
+    "id": "next-3.11.1228",
+    "channel": "next",
+    "build": "3.11.1228",
+    "commit": "053434014dbdb7a662a14e38752946a0dafb97f2",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_NEXT_311",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_NEXT_311"
+    }
+  },
+  {
+    "id": "next-3.11.1216",
+    "channel": "next",
+    "build": "3.11.1216",
+    "commit": "d70b4713dfeaf856a4d8a35b35eac0c86e07af07",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_CC50A3E5DB5F",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_NEXT_311"
+    }
+  },
+  {
+    "id": "next-3.11.1108",
+    "channel": "next",
+    "build": "3.11.1108",
+    "commit": "727501f0a20f5297167ce744cc1cff5f0a0a1aca",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_CB39957B4686",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_RELEASE_4112D2241CE1"
+    }
+  },
+  {
+    "id": "next-3.10.1035",
+    "channel": "next",
+    "build": "3.10.1035",
+    "commit": "dfa4a2d639b8a05ab72387c12f1aafca1b4c3cb9",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_E5612EDAC16B",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_RELEASE_BA4ECF0DFC9E"
+    }
+  },
+  {
+    "id": "next-3.10.1031",
+    "channel": "next",
+    "build": "3.10.1031",
+    "commit": "b98cc43128712ba73c60cca73876f58a710aaa27",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_86774CB5A111",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_RELEASE_57566D9AFFE8"
+    }
+  },
+  {
+    "id": "next-3.10.1027",
+    "channel": "next",
+    "build": "3.10.1027",
+    "commit": "bcbe88c734e882c54479decce8c34eabc9f8f8b0",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_8F85EBC297AC",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_RELEASE_BF7A3CCFACE3"
+    }
+  },
+  {
+    "id": "next-3.10.1023",
+    "channel": "next",
+    "build": "3.10.1023",
+    "commit": "deb816008be02bf5f9da707b7def3ebdb53a51cd",
+    "markers": {
+      "sessions": "BYOK_NATIVE_PICKER_SESSIONS_RELEASE_27AE367A859F",
+      "editor": "BYOK_NATIVE_PICKER_EDITOR_RELEASE_047CC617A908"
+    }
+  }
+]

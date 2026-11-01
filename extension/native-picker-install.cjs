@@ -7,7 +7,9 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const vm = require("node:vm");
 const childProcess = require("node:child_process");
-const { SESSIONS_MARKER, PREVIOUS_SESSIONS_MARKER, LEGACY_SESSIONS_MARKER, OLDER_SESSIONS_MARKER, OLDEST_SESSIONS_MARKER, EARLIEST_SESSIONS_MARKER, EDITOR_MARKER, PREVIOUS_EDITOR_MARKER, LEGACY_EDITOR_MARKER, OLDER_EDITOR_MARKER, OLDEST_EDITOR_MARKER, patchNativePicker, unpatchNativePicker, isEditorPickerPatched, isSessionsPickerPatched } = require("./native-picker-patch.cjs");
+const compatibilityRegistry = require("./native-picker-compat.cjs");
+const { resolveNativePickerCompatibility } = require("./native-picker-patch.cjs");
+const { SESSIONS_MARKER, PREVIOUS_SESSIONS_MARKER, LEGACY_SESSIONS_MARKER, OLDER_SESSIONS_MARKER, OLDEST_SESSIONS_MARKER, EARLIEST_SESSIONS_MARKER, NEXT_310_SESSIONS_MARKER, EDITOR_MARKER, PREVIOUS_EDITOR_MARKER, LEGACY_EDITOR_MARKER, OLDER_EDITOR_MARKER, OLDEST_EDITOR_MARKER, NEXT_310_EDITOR_MARKER, patchNativePicker, unpatchNativePicker, isEditorPickerPatched, isSessionsPickerPatched } = require("./native-picker-patch.cjs");
 
 const WORKBENCH_KEY = "vs/workbench/workbench.desktop.main.js";
 const SESSIONS_KEY = "vs/sessions/sessions.desktop.main.js";
@@ -135,23 +137,45 @@ function installNativePicker(appRoot, { remove = false, dryRun = false } = {}) {
   const pending = new Set();
   const committed = [];
   let paths;
+  let diagnostics;
   try {
     paths = checkedPaths(appRoot);
     const beforeProduct = boundedRead(paths.product, MAX_PRODUCT_BYTES);
     let productText = beforeProduct.toString("utf8");
     if (!Buffer.from(productText,"utf8").equals(beforeProduct)) throw new Error("Product file is not valid UTF-8");
-    const replacements = [], inspected = [], hashes = [];
+    const product = JSON.parse(productText);
+    diagnostics = {
+      pluginVersion: require("./package.json").version,
+      hostName: String(product.nameLong || product.nameShort || ""),
+      hostVersion: String(product.version || ""),
+      hostBuild: String(product.windsurfVersion || product.devinVersion || ""),
+      hostCommit: String(product.commit || ""),
+      targets: [],
+    };
+    const replacements = [], inspected = [], hashes = [], selectedAdapters = [];
     for (const target of paths.targets) {
     const beforeWorkbench = boundedRead(target.file, MAX_WORKBENCH_BYTES);
     inspected.push({target:target.file,before:beforeWorkbench});
     const source = beforeWorkbench.toString("utf8");
     if (!Buffer.from(source, "utf8").equals(beforeWorkbench)) throw new Error("Workbench source is not valid UTF-8");
+    diagnostics.targets.push({
+      bundle: target.checksumKey, sha256: digest(beforeWorkbench),
+      pickerComponents: [...source.matchAll(/([\w$]+)\.displayName="AcpModelSelect"/g)].slice(0, 8).map(match => match[1]),
+    });
+    if (!remove) {
+      const selection = resolveNativePickerCompatibility(source, {
+        host: product,
+        surface: target.checksumKey === SESSIONS_KEY ? 'sessions' : target.checksumKey === EDITOR_KEY ? 'editor' : undefined,
+      });
+      selectedAdapters.push(selection);
+      diagnostics.targets.at(-1).compatibility = selection;
+    }
     // A verified older Sessions adapter contains the context-snapshot URL as
     // one of its bounded edits.  Inspect its exact unpatched form so that a
     // legitimate V2-V5 -> V6 upgrade is not mistaken for arbitrary renderer
     // residue. unpatchNativePicker validates every known boundary first; any
     // partial or forged adapter is rejected before we touch the host files.
-    const residueSource = source.includes(SESSIONS_MARKER) || source.includes(PREVIOUS_SESSIONS_MARKER) || source.includes(LEGACY_SESSIONS_MARKER) || source.includes(OLDER_SESSIONS_MARKER) || source.includes(OLDEST_SESSIONS_MARKER) || source.includes(EARLIEST_SESSIONS_MARKER) || source.includes(EDITOR_MARKER) || source.includes(PREVIOUS_EDITOR_MARKER) || source.includes(LEGACY_EDITOR_MARKER) || source.includes(OLDER_EDITOR_MARKER) || source.includes(OLDEST_EDITOR_MARKER)
+    const residueSource = source.includes('BYOK_NATIVE_PICKER_')
       ? unpatchNativePicker(source).code
       : source;
     const legacy = LEGACY_MARKERS.find(marker => residueSource.includes(marker));
@@ -168,12 +192,15 @@ function installNativePicker(appRoot, { remove = false, dryRun = false } = {}) {
     replacements.push({target:target.file,before:beforeWorkbench,after:afterWorkbench});
     hashes.push({path:target.file,beforeHash:digest(beforeWorkbench),afterHash:digest(afterWorkbench)});
     }
-    if (!replacements.length) return {ok:true,changed:false,reloadRequired:false,action:remove?"remove":"install",workbench:paths.workbench,targets:paths.targets.map(t=>t.file)};
+    if (!remove) compatibilityRegistry.assertBundleSet(selectedAdapters, paths.targets.length);
+    const compatibility = remove ? undefined : {selected:selectedAdapters,available:compatibilityRegistry.catalog()};
+    if (!replacements.length) return {ok:true,changed:false,reloadRequired:false,action:remove?"remove":"install",workbench:paths.workbench,targets:paths.targets.map(t=>t.file),compatibility};
     const afterProduct = Buffer.from(productText,"utf8");
     const result = {
       ok: true, changed: true, reloadRequired: !dryRun, dryRun: Boolean(dryRun),
       action: remove ? "remove" : "install", workbench: paths.workbench,
       beforeHash: hashes[0].beforeHash, afterHash: hashes[0].afterHash, targets:paths.targets.map(t=>t.file), hashes,
+      compatibility,
     };
     if (dryRun) return result;
     result.backups = {
@@ -210,6 +237,8 @@ function installNativePicker(appRoot, { remove = false, dryRun = false } = {}) {
       ok: false, changed: rollbackErrors.length > 0, reloadRequired: false,
       action: remove ? "remove" : "install",
       error: String(error && error.message || error).slice(0, 2000),
+      ...(error && error.code ? { errorCode: String(error.code) } : {}),
+      ...(diagnostics ? { diagnostics } : {}),
       ...(rollbackErrors.length ? { rollbackErrors } : {}),
     };
   } finally {

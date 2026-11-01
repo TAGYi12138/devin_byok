@@ -194,7 +194,7 @@ class CrashDiagnostics {
     this.started = true;
     try {
       fs.mkdirSync(this.rootDir, { recursive: true });
-      fs.writeFileSync(this.readme, "Devin BYOK Bridge crash diagnostics\n" +
+      fs.writeFileSync(this.readme, "Devin Model Gateway crash diagnostics\n" +
         "Each runtime-<pid>.jsonl is bounded to three 8 MiB generations (current, .1 and .2).\n" +
         "critical-<pid>.jsonl is synchronously written for fatal exceptions and shutdown boundaries.\n" +
         "It records extension-host memory; per-PID Devin working set/private/page-file bytes, handles and threads; system commit/pool pressure; relevant host logs; Windows crash events; and crash-dump metadata.\n" +

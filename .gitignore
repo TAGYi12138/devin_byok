@@ -1,5 +1,6 @@
 # VS Code Extension Build Artifacts
 *.vsix
+
 *.vsixmanifest
 
 # Backup directories
@@ -31,17 +32,25 @@ node_modules/
 Thumbs.db
 
 # Devin specific
+.devin/mcp_config.local.json
+.playwright-mcp/
 crash-bundles/
-cloud-gateway/
-packaging/
+cloud-gateway/data/
+cloud-gateway/.env
+cloud-gateway/models.json
+cloud-gateway/Caddyfile
+
 redesign/
 stage/
-tools/
+cloud-builds/
+
 analysis/
-extension/media/
-extension/scripts/
-extension/server/
-extension/crash-diagnostics.js
-extension/native-picker-install.cjs
-extension/native-picker-patch.cjs
-extension/ssh-remote-support.cjs
+
+# Local build output
+artifacts/
+local-builds/
+# Local credentials
+.env
+.env.*
+!.env.example
+!packaging/extension.vsixmanifest

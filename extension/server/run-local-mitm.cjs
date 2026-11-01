@@ -5,6 +5,12 @@
 // Devin-compatible transport shell; provider routing and upstream secrets are
 // handled by the cloud gateway.
 var __byokCloudRelayClient = require('./cloud-relay-client.cjs');
+var __byokOutputHealth = require('./output-health.cjs');
+var __byokInlineReasoning = require('./inline-reasoning.cjs');
+var __byokAcceptance = require('./acceptance-guard.cjs');
+var __byokSubagentRouting = require('./subagent-routing.cjs');
+var __byokSubagentToolCalls = require('./subagent-tool-calls.cjs');
+var __byokImagePreprocess = require('./image-preprocess.cjs');
 function _byokCloudRelayEnabled() {
   return !!__byokCloudRelayClient.cloudRelayConfig();
 }
@@ -17293,6 +17299,8 @@ var Pi = Q((_0xbc2146, _0x59d156) => {
     return _0x5f1354;
   }
   function _0x44ab3b() {
+    const managedBindings = require("./cloud-managed.cjs").bindings();
+    if (managedBindings) return managedBindings;
     let _0x122773 = _0x43d49d();
     if (!_0x122773 || !_0x122773.enabled) {
       return new Map();
@@ -17402,6 +17410,8 @@ var Pi = Q((_0xbc2146, _0x59d156) => {
     return (Array.isArray(_0x2d8d65?.providers) ? _0x2d8d65.providers : []).find(_0x222529 => _0x222529 && _0x222529.id === _0x545368) || null;
   }
   function _0x25e2c2(_0x347b4e) {
+    const managedBinding = require("./cloud-managed.cjs").resolve(_0x347b4e);
+    if (managedBinding) return managedBinding;
     let _0x38bf46 = _0x1c7a2b(_0x347b4e);
     if (!_0x38bf46) {
       return {
@@ -17574,11 +17584,15 @@ var Pi = Q((_0xbc2146, _0x59d156) => {
     };
   }
   function _0xe3e5d0(_0x26e6fa = {}) {
+    const managedState = require("./cloud-managed.cjs").read();
+    if (managedState) return { ...require("./cloud-managed.cjs").resolve(managedState.models[0]?.nativeUid || ""), enabled:true, unlockModels:true, unlockScope:"local", entryBindings:[], injectByokModel:false, timeoutMs:Math.max(300000,(Number(managedState.models[0]?.requestTimeoutMs)||300000)+30000), configured:!!managedState.accessToken, maxTokens:managedState.models[0]?.maxOutputTokens || 16384 };
     let _0x50e966 = _0x4de28f();
     let _0x59b2e4 = _0x48128a();
     return _0x390607(_0x59b2e4, _0x50e966, _0x26e6fa);
   }
   function _0x536ced(_0x129028, _0x40d8ae) {
+    const managedRoute = require("./cloud-managed.cjs").resolve(String(_0x129028 || "").trim());
+    if (managedRoute) return { ok:true, modelUid:_0x129028, match:_0x129028, boundModelUid:_0x129028, cfg:{ ...managedRoute, configured:true, enabled:true, unlockModels:true, unlockScope:"local", maxTokens:16384, timeoutMs:managedRoute.timeoutMs||300000, apiFormat:managedRoute.protocol, keyLen:managedRoute.apiKey.length } };
     let _0x998d06 = _0x4de28f();
     let _0x258b90 = _0x40d8ae || _0xe3e5d0();
     let _0x802bda = String(_0x129028 || "").trim();
@@ -17933,6 +17947,8 @@ var Zr = Q((_0xaddab5, _0x7aa35b) => {
   var _0xa0057f = require("node:fs");
   var _0xd2d595 = require("node:path");
   var _0x3c07ee = require("node:os");
+  var _byokSessionIdentity = require("./session-identity.cjs");
+  var _byokPromptIdentities = new _byokSessionIdentity.PromptIdentityRegistry();
   var _0x427d8c = process.env.BYOK_LOCAL_PROBE_APPDATA || _0xd2d595.join(process.env.APPDATA || _0xd2d595.join(_0x3c07ee.homedir(), "AppData", "Roaming"), "BYOK-Local-Probe");
   var _0xb87b57 = process.env.BYOK_LOCAL_PROBE_LAST_SELECTED || _0xd2d595.join(_0x427d8c, "last-selected-model.json");
   var _byokSessionSelectionsPath = process.env.BYOK_LOCAL_PROBE_SESSION_SELECTIONS || _0xd2d595.join(_0x427d8c, "session-selected-models.json");
@@ -18083,6 +18099,32 @@ var Zr = Q((_0xaddab5, _0x7aa35b) => {
       return false;
     }
   }
+  function _byokRowCascadeIds(row) {
+    let values = [...(Array.isArray(row && row.cascadeIds) ? row.cascadeIds : []), row && row.cascadeId];
+    return [...new Set(values.map(value => String(value || "").trim()).filter(value => value && value.length <= 256))].slice(-8);
+  }
+  function _byokAddCascadeId(doc, sessionId, previous, cascadeIdValue) {
+    let ids = _byokRowCascadeIds(previous);
+    let cascadeId = String(cascadeIdValue || "").trim();
+    if (!cascadeId || cascadeId.length > 256 || ids.includes(cascadeId)) return ids;
+    for (let [otherSessionId, row] of Object.entries(doc.sessions || {})) {
+      if (otherSessionId !== sessionId && _byokRowCascadeIds(row).includes(cascadeId)) return ids;
+    }
+    return [...ids, cascadeId].slice(-8);
+  }
+  function _byokBindCascadeToSession(sessionIdValue, cascadeIdValue) {
+    let sessionId = _byokCleanSessionId(sessionIdValue);
+    let cascadeId = String(cascadeIdValue || "").trim();
+    if (!sessionId || !cascadeId || cascadeId.length > 256) return false;
+    let doc = _byokReadSessionSelections();
+    let row = doc.sessions[sessionId];
+    if (!row) return false;
+    let ids = _byokAddCascadeId(doc, sessionId, row, cascadeId);
+    if (!ids.includes(cascadeId)) return false;
+    if (row.cascadeId === cascadeId && Array.isArray(row.cascadeIds) && row.cascadeIds.includes(cascadeId)) return true;
+    doc.sessions[sessionId] = { ...row, cascadeId, cascadeIds: ids, cascadeBoundAt: new Date().toISOString() };
+    return _byokWriteSessionSelections(doc);
+  }
   function _byokRememberSessionSelection(sessionIdValue, uidValue, src = "ui", familyKeyValue = "", cascadeIdValue = "") {
     let sessionId = _byokCleanSessionId(sessionIdValue);
     let uid = String(uidValue || "").trim();
@@ -18092,8 +18134,10 @@ var Zr = Q((_0xaddab5, _0x7aa35b) => {
     if (!familyKey) {
       try { familyKey = String((Ns().familyKeyFromUid || (() => ""))(uid) || ""); } catch {}
     }
-    let cascadeId = String(cascadeIdValue || "").trim().slice(0, 256);
-    let row = { uid, familyKey: familyKey || undefined, label: _0x3b9d80(uid), src: String(src || "ui").slice(0, 80), ...(cascadeId ? { cascadeId } : {}), at: new Date().toISOString() };
+    let previous = doc.sessions[sessionId];
+    let cascadeIds = _byokAddCascadeId(doc, sessionId, previous, cascadeIdValue);
+    let cascadeId = cascadeIds.at(-1) || "";
+    let row = { uid, familyKey: familyKey || undefined, label: _0x3b9d80(uid), src: String(src || "ui").slice(0, 80), ...(cascadeId ? { cascadeId, cascadeIds } : {}), at: new Date().toISOString() };
     doc.sessions[sessionId] = row;
     return _byokWriteSessionSelections(doc) ? row : null;
   }
@@ -18101,8 +18145,10 @@ var Zr = Q((_0xaddab5, _0x7aa35b) => {
     let sessionId = _byokCleanSessionId(sessionIdValue);
     if (!sessionId) return null;
     let doc = _byokReadSessionSelections();
-    let cascadeId = String(cascadeIdValue || "").trim().slice(0, 256);
-    let row = { official: true, uid: "", officialUid: String(uidValue || "").trim().slice(0, 256), src: String(src || "ui").slice(0, 80), ...(cascadeId ? { cascadeId } : {}), at: new Date().toISOString() };
+    let previous = doc.sessions[sessionId];
+    let cascadeIds = _byokAddCascadeId(doc, sessionId, previous, cascadeIdValue);
+    let cascadeId = cascadeIds.at(-1) || "";
+    let row = { official: true, uid: "", officialUid: String(uidValue || "").trim().slice(0, 256), src: String(src || "ui").slice(0, 80), ...(cascadeId ? { cascadeId, cascadeIds } : {}), at: new Date().toISOString() };
     doc.sessions[sessionId] = row;
     return _byokWriteSessionSelections(doc) ? row : null;
   }
@@ -18177,7 +18223,7 @@ var Zr = Q((_0xaddab5, _0x7aa35b) => {
     let doc = _byokReadSessionSelections();
     let matches = [];
     for (let [sessionId, row] of Object.entries(doc && doc.sessions || {})) {
-      if (!row || String(row.cascadeId || "").trim() !== cascadeId) continue;
+      if (!row || !_byokRowCascadeIds(row).includes(cascadeId)) continue;
       let atMs = Date.parse(String(row.at || ""));
       if (!Number.isFinite(atMs) || Date.now() - atMs > 7 * 24 * 60 * 60 * 1000) continue;
       let uid = String(row.uid || "").trim();
@@ -18194,41 +18240,68 @@ var Zr = Q((_0xaddab5, _0x7aa35b) => {
     let cascadeId = String(cascadeIdValue || "").trim();
     if (!cascadeId) return { match: "no-request-cascade", candidateSessionIds: [], candidateCount: 0 };
     let doc = _byokReadSessionSelections();
-    let matches = Object.entries(doc && doc.sessions || {}).filter(([, row]) => row && String(row.cascadeId || "").trim() === cascadeId).map(([sessionId]) => sessionId);
+    let matches = Object.entries(doc && doc.sessions || {}).filter(([, row]) => row && _byokRowCascadeIds(row).includes(cascadeId)).map(([sessionId]) => sessionId);
     if (matches.length === 1) return { match: "cascade-exact", matchedSessionId: matches[0], candidateSessionIds: matches, candidateCount: 1 };
     return { match: matches.length > 1 ? "cascade-ambiguous" : "cascade-miss", candidateSessionIds: matches, candidateCount: matches.length };
   }
+  function _byokClaimCascadeForRecentExplicitSelection(cascadeIdValue, maxAgeMs = 30000) {
+    let cascadeId = String(cascadeIdValue || "").trim();
+    if (!cascadeId || cascadeId.length > 256) return null;
+    let existing = _byokReadCascadeChoice(cascadeId);
+    if (existing) return existing;
+    let doc = _byokReadSessionSelections();
+    let now = Date.now();
+    let limit = Math.max(1000, Math.min(60000, Number(maxAgeMs) || 30000));
+    let candidates = Object.entries(doc.sessions || {}).filter(([, row]) => {
+      if (!row || row.official === true || !/^sessions-native-select$/i.test(String(row.src || "")) || String(row.cascadeId || "").trim()) return false;
+      let uid = String(row.uid || "").trim();
+      let atMs = Date.parse(String(row.at || ""));
+      return !!uid && !_0x4e1d12(uid) && !_0xa95421(uid) && _byokSessionUidIsBound(uid) && Number.isFinite(atMs) && now - atMs >= 0 && now - atMs <= limit;
+    });
+    if (candidates.length !== 1) return null;
+    let [sessionId, row] = candidates[0];
+    if (!_byokBindCascadeToSession(sessionId, cascadeId)) return null;
+    return _byokReadCascadeChoice(cascadeId);
+  }
+  function _byokRegisterPromptIdentity(sessionIdValue, promptValue) {
+    let sessionId = _byokCleanSessionId(sessionIdValue);
+    if (!sessionId) return { ok: false, reason: "invalid-session" };
+    let choice = _byokReadSessionChoice(sessionId);
+    return _byokPromptIdentities.register({ sessionId, prompt: promptValue, choice });
+  }
+  function _byokResolvePromptIdentity(promptValue) {
+    return _byokPromptIdentities.resolve(promptValue);
+  }
   function _byokResolveSessionFromMessageIds(messageIdsValue) {
-    let messageIds = [...new Set((Array.isArray(messageIdsValue) ? messageIdsValue : []).map(value => String(value || "").trim()).filter(value => value && value.length <= 512))].slice(0, 64);
-    if (!messageIds.length) return { match: "no-message-id", sessionId: "", candidateSessionIds: [], candidateCount: 0 };
-    let dbPath = String(process.env.BYOK_LOCAL_SESSIONS_DB || "").trim();
-    if (!dbPath) {
-      let path = require("node:path");
-      let os = require("node:os");
-      let appData = process.platform === "win32"
-        ? process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming")
-        : process.platform === "darwin"
-          ? path.join(os.homedir(), "Library", "Application Support")
-          : process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
-      dbPath = path.join(appData, "devin", "cli-next", "sessions.db");
+    return _byokSessionIdentity.resolveSessionFromMessageIds(messageIdsValue);
+  }
+  function _byokResolveRequestSessionIdentity(requestValue) {
+    let request = requestValue && typeof requestValue === "object" ? requestValue : {};
+    let sessionId = String(request.sessionId || "").trim();
+    let prompt = _byokResolvePromptIdentity(request.lastUserText);
+    if (sessionId) {
+      let promptSession = String(prompt && prompt.sessionId || "").trim();
+      let sameSession = promptSession === sessionId || promptSession.endsWith("/" + sessionId) || sessionId.endsWith("/" + promptSession);
+      if (prompt.match === "prompt-exact" && !sameSession) return { match: "identity-conflict", candidateSessionIds: [sessionId, promptSession], candidateCount: 2 };
+      return { match: "metadata-exact", sessionId, candidateSessionIds: [sessionId], candidateCount: 1 };
     }
-    let db;
-    try {
-      let { DatabaseSync } = require("node:sqlite");
-      let fs = require("node:fs");
-      if (!fs.existsSync(dbPath)) return { match: "session-db-missing", sessionId: "", candidateSessionIds: [], candidateCount: 0 };
-      db = new DatabaseSync(dbPath, { readOnly: true });
-      db.exec("PRAGMA busy_timeout=250");
-      let placeholders = messageIds.map(() => "?").join(",");
-      let rows = db.prepare("SELECT DISTINCT session_id FROM message_nodes WHERE json_valid(chat_message) AND json_extract(chat_message, '$.message_id') IN (" + placeholders + ") LIMIT 3").all(...messageIds);
-      let candidates = rows.map(row => String(row && row.session_id || "").trim()).filter(Boolean);
-      if (candidates.length === 1) return { match: "message-exact", sessionId: candidates[0], candidateSessionIds: candidates, candidateCount: 1 };
-      return { match: candidates.length > 1 ? "message-ambiguous" : "message-miss", sessionId: "", candidateSessionIds: candidates, candidateCount: candidates.length };
-    } catch (error) {
-      return { match: "session-db-error", sessionId: "", candidateSessionIds: [], candidateCount: 0, error: String(error && error.code || error && error.name || "Error") };
-    } finally {
-      try { if (db) db.close(); } catch {}
-    }
+    if (prompt.match === "prompt-exact") return { ...prompt, candidateSessionIds: [prompt.sessionId] };
+    let cascade = _byokReadCascadeChoice(request.cascadeId);
+    if (cascade) return { match: "cascade-exact", sessionId: cascade.sessionId, candidateSessionIds: [cascade.sessionId], candidateCount: 1 };
+    let message = _byokResolveSessionFromMessageIds(request.messageIds);
+    if (message.match === "message-exact") return message;
+    let doc = _byokReadSessionSelections();
+    let now = Date.now();
+    let candidates = Object.entries(doc.sessions || {}).filter(([, row]) => {
+      let at = Date.parse(String(row && row.at || ""));
+      return Number.isFinite(at) && now - at >= 0 && now - at <= 7 * 24 * 60 * 60 * 1000;
+    }).map(([id]) => id);
+    let tool = _byokSessionIdentity.resolveSessionFromToolHistory(request.messages, candidates);
+    if (tool.match === "tool-lineage-exact") return { ...tool, candidateSessionIds: [tool.sessionId] };
+    let persistedPrompt = _byokSessionIdentity.resolveSessionFromPromptHistory(request.lastUserText);
+    if (persistedPrompt.match === "db-prompt-exact") return { ...persistedPrompt, candidateSessionIds: [persistedPrompt.sessionId] };
+    if (persistedPrompt.match === "db-prompt-ambiguous") return { ...persistedPrompt, promptMatch: "prompt-ambiguous", candidateSessionIds: [] };
+    return { ...tool, messageMatch: message.match, promptMatch: prompt.match, candidateSessionIds: [] };
   }
   let _byokPersistedContextCache = new Map();
   function _byokReadPersistedSessionContext(conversationIdValue, requestedModelUidValue = "") {
@@ -18250,7 +18323,7 @@ var Zr = Q((_0xaddab5, _0x7aa35b) => {
         : process.platform === "darwin"
           ? path.join(os.homedir(), "Library", "Application Support")
           : process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
-      let dbPath = String(process.env.BYOK_LOCAL_SESSIONS_DB || path.join(appData, "devin", "cli-next", "sessions.db")).trim();
+      let dbPath = String(_byokSessionIdentity.defaultSessionsDbPath()).trim();
       if (!dbPath || !_0xa0057f.existsSync(dbPath)) return null;
       let { DatabaseSync } = require("node:sqlite");
       db = new DatabaseSync(dbPath, { readOnly: true });
@@ -18341,6 +18414,8 @@ var Zr = Q((_0xaddab5, _0x7aa35b) => {
     let uid = String(uidValue || "").trim();
     if (!uid) return false;
     try {
+      const managedBindings = require('./cloud-managed.cjs').bindings();
+      if (managedBindings) return managedBindings.has(uid);
       let doc = JSON.parse(_0xa0057f.readFileSync(_byokLocalBindingsPath, "utf8"));
       let binding = doc && doc.bindings && doc.bindings[uid];
       return !!(doc && doc.enabled && binding && String(binding.providerId || "").trim() && String(binding.modelId || "").trim());
@@ -18352,6 +18427,14 @@ var Zr = Q((_0xaddab5, _0x7aa35b) => {
     let familyKey = String(familyValue || "").trim().toLowerCase();
     if (!familyKey) return "";
     try {
+      const managedBindings = require('./cloud-managed.cjs').bindings();
+      if (managedBindings) {
+        for (const [uid, binding] of managedBindings) {
+          const candidate = String(binding.familyKey || require('../model-families.cjs').familyKeyFromUid(uid) || '').toLowerCase();
+          if (candidate === familyKey) return uid;
+        }
+        return '';
+      }
       let doc = JSON.parse(_0xa0057f.readFileSync(_byokLocalBindingsPath, "utf8"));
       if (!doc || !doc.enabled || !doc.bindings || typeof doc.bindings !== "object") return "";
       let familyKeyFromUid = null;
@@ -18379,7 +18462,7 @@ var Zr = Q((_0xaddab5, _0x7aa35b) => {
     let _byokSessionId = String(options.sessionId || "").trim();
       if (_byokSessionId.indexOf("metadata:") === 0) _byokSessionId = _byokSessionId.slice(9);
       if (_byokSessionId) {
-        let _byokChoice = _byokReadSessionChoice(_byokSessionId);
+        let _byokChoice = options.choice && typeof options.choice === "object" ? options.choice : _byokReadSessionChoice(_byokSessionId);
         let _byokHadExactChoice = !!_byokChoice;
         // An exact persisted session choice is authoritative for an ordinary
         // chat request. Devin's sessions.db may still carry an older custom
@@ -18493,7 +18576,12 @@ var Zr = Q((_0xaddab5, _0x7aa35b) => {
     diagnoseSessionChoice: _byokDiagnoseSessionChoice,
     readCascadeChoice: _byokReadCascadeChoice,
     diagnoseCascadeChoice: _byokDiagnoseCascadeChoice,
+    claimCascadeForRecentExplicitSelection: _byokClaimCascadeForRecentExplicitSelection,
+    bindCascadeToSession: _byokBindCascadeToSession,
+    registerPromptIdentity: _byokRegisterPromptIdentity,
+    resolvePromptIdentity: _byokResolvePromptIdentity,
     resolveSessionFromMessageIds: _byokResolveSessionFromMessageIds,
+    resolveRequestSessionIdentity: _byokResolveRequestSessionIdentity,
     readPersistedSessionContext: _byokReadPersistedSessionContext,
     resolveContextConversationId: _byokResolveContextConversationId,
     resolveEffectiveEntryUid: _0x32635b,
@@ -18521,6 +18609,7 @@ var zs = Q((_0x5ab287, _0x89421d) => {
   var {
     redactBodyText: _0x270997
   } = As();
+  var _byokSharedReasoning = require("./reasoning-controls.cjs");
   function _0x2d42ef(_0x11a2af) {
     let _0x5750e8 = String(_0x11a2af || "").toLowerCase();
     if (_0x5750e8) {
@@ -18530,7 +18619,9 @@ var zs = Q((_0x5ab287, _0x89421d) => {
     }
   }
   function _0x5decec(_0x2a0e5a) {
-    if (_0x2d42ef(_0x2a0e5a)) {
+    // Reasoning models can reject a fixed sampling temperature, especially
+    // when an explicit reasoning effort is present in the same request.
+    if (_0x2d42ef(_0x2a0e5a) || /^(?:gpt-[56](?:[-_.]|$)|o[1-4](?:[-_.]|$)|grok-4(?:[-_.]|$)|gemini-(?:2[._-]5|3)(?:[-_.]|$))/i.test(String(_0x2a0e5a || ""))) {
       return {};
     } else {
       return {
@@ -18586,36 +18677,7 @@ var zs = Q((_0x5ab287, _0x89421d) => {
     return _0x26d7f0;
   }
   function _0x6b4d2e() {
-    let _0x480f2b = "text";
-    let _0x3ac188 = "";
-    return {
-      push(_0x4c2a8e, _0x5ae5ad = false) {
-        _0x3ac188 += String(_0x4c2a8e || "");
-        let _0x26d7f0 = { text: "", reasoning: "" };
-        while (_0x3ac188) {
-          let _0x274d95 = _0x480f2b === "text" ? "<think>" : "</think>";
-          let _0x54bcc0 = _0x3ac188.toLowerCase().indexOf(_0x274d95);
-          if (_0x54bcc0 >= 0) {
-            _0x26d7f0[_0x480f2b] += _0x3ac188.slice(0, _0x54bcc0);
-            _0x3ac188 = _0x3ac188.slice(_0x54bcc0 + _0x274d95.length);
-            _0x480f2b = _0x480f2b === "text" ? "reasoning" : "text";
-            continue;
-          }
-          let _0x2c0646 = 0;
-          if (!_0x5ae5ad) {
-            let _0x45b9f1 = _0x3ac188.toLowerCase();
-            for (let _0x1b2d95 = 1; _0x1b2d95 < _0x274d95.length && _0x1b2d95 <= _0x45b9f1.length; _0x1b2d95++) {
-              if (_0x274d95.startsWith(_0x45b9f1.slice(-_0x1b2d95))) _0x2c0646 = _0x1b2d95;
-            }
-          }
-          let _0x2f4f39 = _0x3ac188.slice(0, _0x3ac188.length - _0x2c0646);
-          _0x26d7f0[_0x480f2b] += _0x2f4f39;
-          _0x3ac188 = _0x3ac188.slice(_0x3ac188.length - _0x2c0646);
-          break;
-        }
-        return _0x26d7f0;
-      }
-    };
+    return __byokInlineReasoning.createInlineReasoningSplitter();
   }
   function _0x4d7b2c(_0x4665ed) {
     let _0x4f5e8a = _0x4665ed && _0x4665ed.choices && _0x4665ed.choices[0] || {};
@@ -18651,31 +18713,10 @@ var zs = Q((_0x5ab287, _0x89421d) => {
     return "";
   }
   function _0x1e6a4b(_0x5d5d2e, _0x3c124b) {
-    let _0x34cf5e = _0x5d5d2e && typeof _0x5d5d2e === "object" ? _0x5d5d2e : {};
-    let _0x1b2d95 = String(_0x34cf5e.reasoningEffort || _0x34cf5e.effort || "").trim().toLowerCase();
-    if (!_0x1b2d95) {
-      let _0x45b9f1 = String(_0x34cf5e.uid || _0x34cf5e.modelUid || "").trim().toLowerCase().replace(/_/g, "-");
-      let _0x2c0646 = _0x45b9f1.match(/(?:^|-)(minimal|low|medium|high|xhigh|max)(?:-|$)/);
-      _0x1b2d95 = _0x2c0646 ? _0x2c0646[1] : "";
-    }
-    if (!["minimal", "low", "medium", "high", "xhigh", "max"].includes(_0x1b2d95)) {
-      return "";
-    }
-    let _0x4f24cb = String(_0x3c124b && _0x3c124b.model || "").trim().toLowerCase();
-    // Preserve the pre-1.0.78 OpenAI/o-series/Claude behavior. DeepSeek is
-    // handled by the capability resolver below because its Chat API also
-    // requires an explicit thinking switch.
-    return /^(?:gpt-|o[1-4](?:[.-]|$)|claude(?:[-_]|$))/i.test(_0x4f24cb) ? _0x1b2d95 : "";
+    return _byokMapCompatibleEffort(_0x5d5d2e, _0x3c124b).effort;
   }
-  function _0x5c8e2a(_0x5d5d2e) {
-    let _0x34cf5e = _0x5d5d2e && typeof _0x5d5d2e === "object" ? _0x5d5d2e : {};
-    let _0x1b2d95 = String(_0x34cf5e.reasoningEffort || _0x34cf5e.effort || "").trim().toLowerCase();
-    if (!_0x1b2d95) {
-      let _0x45b9f1 = String(_0x34cf5e.uid || _0x34cf5e.modelUid || "").trim().toLowerCase().replace(/_/g, "-");
-      let _0x2c0646 = _0x45b9f1.match(/(?:^|-)(none|minimal|low|medium|high|xhigh|max|ultra)(?:-|$)/);
-      _0x1b2d95 = _0x2c0646 ? _0x2c0646[1] : "";
-    }
-    return ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"].includes(_0x1b2d95) ? _0x1b2d95 : "";
+  function _0x5c8e2a(identity) {
+    return _byokSharedReasoning.requestedEffort(identity);
   }
   function _0x2c4e6a(_0x3c124b) {
     let _0x5a1d2e = _0x3c124b && typeof _0x3c124b === "object" ? _0x3c124b : {};
@@ -18704,13 +18745,7 @@ var zs = Q((_0x5ab287, _0x89421d) => {
     let isClaude = /^claude(?:[-_]|$)/i.test(model);
     let isGlm53 = /^glm[-_.]?5[-_.]?3(?:[-_.]|$)/i.test(model);
     let isKimiK3 = /^kimi[-_.]?k3(?:[-_.]|$)/i.test(model);
-    let reasoningDialect = "unknown";
-    if (isClaude) reasoningDialect = "legacy-claude";
-    else if (["deepseek-chat", "glm-chat", "zhipu-chat", "kimi-k3", "openai-chat", "none"].includes(explicitDialect)) reasoningDialect = explicitDialect === "zhipu-chat" ? "glm-chat" : explicitDialect;
-    else if (/deepseek/i.test(model)) reasoningDialect = "deepseek-chat";
-    else if (isGlm53) reasoningDialect = "glm-chat";
-    else if (isKimiK3) reasoningDialect = "kimi-k3";
-    else if (/^(?:gpt-|o[1-4](?:[.-]|$))/i.test(model)) reasoningDialect = "openai-chat";
+    let reasoningDialect = _byokSharedReasoning.resolveDialect(model, explicitDialect);
     let vision = typeof _byokProvider.supportsVision === "boolean" ? _byokProvider.supportsVision : null;
     if (vision == null) {
       if (/deepseek-(?:v4(?:[._-]?1)?-)?flash/i.test(model)) vision = true;
@@ -18728,63 +18763,20 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       source: typeof _byokProvider.supportsVision === "boolean" || explicitDialect ? "explicit" : reasoningDialect === "unknown" && vision == null ? "unknown" : "model-catalog-rule"
     };
   }
-  function _byokMapDeepSeekEffort(_byokEffort) {
-    let effort = String(_byokEffort || "").trim().toLowerCase();
-    if (effort === "minimal" || effort === "low") return "low";
-    if (effort === "medium" || effort === "high" || effort === "xhigh") return "high";
-    if (effort === "max" || effort === "ultra") return "max";
-    return "";
+  function _byokMapDeepSeekEffort(effort) {
+    return _byokSharedReasoning.mapDeepSeekEffort(effort);
   }
-  function _byokMapGlm53Effort(_byokEffort) {
-    let effort = String(_byokEffort || "").trim().toLowerCase();
-    return ["low", "high", "max"].includes(effort) ? effort : "";
+  function _byokMapGlm53Effort(effort) {
+    return _byokSharedReasoning.mapGlmEffort(effort);
   }
-  function _byokMapKimiK3Effort(_byokEffort) {
-    let effort = String(_byokEffort || "").trim().toLowerCase();
-    return ["low", "high", "max"].includes(effort) ? effort : "";
+  function _byokMapKimiK3Effort(effort) {
+    return _byokSharedReasoning.mapKimiEffort(effort);
   }
-  function _byokApplyReasoningControls(_byokBody, _byokIdentity, _byokProvider, _byokCompaction = false) {
-    let capabilities = _byokResolveModelCapabilities(_byokProvider);
-    if (!_byokBody || typeof _byokBody !== "object" || capabilities.protocol === "anthropic") return capabilities;
-    let requested = _0x5c8e2a(_byokIdentity);
-    if (capabilities.reasoningDialect === "deepseek-chat") {
-      if (_byokCompaction || requested === "none") {
-        _byokBody.thinking = { type: "disabled" };
-        delete _byokBody.reasoning_effort;
-        return capabilities;
-      }
-      let mapped = _byokMapDeepSeekEffort(requested);
-      if (mapped) {
-        _byokBody.thinking = { type: "enabled" };
-        _byokBody.reasoning_effort = mapped;
-      }
-      return capabilities;
-    }
-    if (capabilities.reasoningDialect === "glm-chat") {
-      // GLM-5.3 requires thinking to remain enabled.  Its Chat API accepts
-      // only low/high/max as the top-level reasoning_effort value.
-      _byokBody.thinking = { type: "enabled" };
-      if (!_byokCompaction) {
-        let mapped = _byokMapGlm53Effort(requested);
-        if (mapped) _byokBody.reasoning_effort = mapped;
-      }
-      return capabilities;
-    }
-    if (capabilities.reasoningDialect === "kimi-k3") {
-      // Kimi K3 always thinks and explicitly rejects the `thinking` object.
-      // Its Chat API controls depth only through top-level reasoning_effort.
-      delete _byokBody.thinking;
-      if (!_byokCompaction) {
-        let mapped = _byokMapKimiK3Effort(requested);
-        if (mapped) _byokBody.reasoning_effort = mapped;
-      }
-      return capabilities;
-    }
-    if (!_byokCompaction) {
-      let legacyEffort = _0x1e6a4b(_byokIdentity, _byokProvider);
-      if (legacyEffort) _byokBody.reasoning_effort = legacyEffort;
-    }
-    return capabilities;
+  function _byokMapCompatibleEffort(identity, provider) {
+    return _byokSharedReasoning.mapCompatibleEffort(_0x5c8e2a(identity), _byokResolveModelCapabilities(provider));
+  }
+  function _byokApplyReasoningControls(body, identity, provider, compaction = false) {
+    return _byokSharedReasoning.applyChatControls(body, identity, _byokResolveModelCapabilities(provider), compaction);
   }
   function _byokReasoningCapabilityDiagnostic(_byokIdentity, _byokProvider, _byokCompaction = false) {
     let _byokRequestedEffort = _0x5c8e2a(_byokIdentity);
@@ -18827,15 +18819,16 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       };
     }
     if (_byokProtocol === "openai_responses") {
-      let _byokResponsesEffort = _byokCapabilities.reasoningDialect === "deepseek-chat" ? _byokMapDeepSeekEffort(_byokRequestedEffort) : _0x1e6a4b(_byokIdentity, _byokProvider);
+      let _byokMapping = _byokCapabilities.reasoningDialect === "deepseek-chat" ? { effort: _byokMapDeepSeekEffort(_byokRequestedEffort), recognized: true } : _byokMapCompatibleEffort(_byokIdentity, _byokProvider);
+      let _byokResponsesEffort = _byokMapping.effort;
       return {
         requestedEffort: _byokRequestedEffort,
         effectiveEffort: _byokResponsesEffort,
-        control: _byokResponsesEffort ? "responses-reasoning-effort" : "responses-default",
+        control: _byokResponsesEffort ? "responses-reasoning-effort" : _byokMapping.recognized ? "unsupported-effort" : "responses-default",
         parameter: _byokResponsesEffort ? "reasoning.effort" : "omitted",
         protocol: _byokProtocol,
         modelId: _byokModelId,
-        verification: _byokResponsesEffort ? "transport" : "provider-unconfirmed"
+        verification: _byokResponsesEffort ? "transport" : _byokMapping.recognized ? "unsupported-level" : "provider-unconfirmed"
       };
     }
     if (_byokCapabilities.reasoningDialect === "deepseek-chat") {
@@ -18868,11 +18861,11 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       return {
         requestedEffort: _byokRequestedEffort,
         effectiveEffort: _byokGlmEffort || "model-default",
-        control: _byokGlmEffort ? "glm-thinking-effort" : "glm-thinking",
+        control: _byokGlmEffort ? "glm-thinking-effort" : _byokRequestedEffort === "none" ? "unsupported-effort" : "glm-thinking",
         parameter: _byokGlmEffort ? "thinking.type+reasoning_effort" : "thinking.type",
         protocol: _byokProtocol,
         modelId: _byokModelId,
-        verification: "transport"
+        verification: _byokRequestedEffort === "none" ? "unsupported-level" : "transport"
       };
     }
     if (_byokCapabilities.reasoningDialect === "kimi-k3") {
@@ -18880,19 +18873,20 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       return {
         requestedEffort: _byokRequestedEffort,
         effectiveEffort: _byokKimiEffort || "model-default",
-        control: _byokKimiEffort ? "kimi-k3-reasoning-effort" : "kimi-k3-default",
+        control: _byokKimiEffort ? "kimi-k3-reasoning-effort" : _byokRequestedEffort === "none" ? "unsupported-effort" : "kimi-k3-default",
         parameter: _byokKimiEffort ? "reasoning_effort" : "omitted",
         protocol: _byokProtocol,
         modelId: _byokModelId,
-        verification: _byokKimiEffort ? "transport" : "provider-default"
+        verification: _byokKimiEffort ? "transport" : _byokRequestedEffort === "none" ? "unsupported-level" : "provider-default"
       };
     }
-    let _byokOpenAiEffort = _0x1e6a4b(_byokIdentity, _byokProvider);
+    let _byokMapping = _byokMapCompatibleEffort(_byokIdentity, _byokProvider);
+    let _byokOpenAiEffort = _byokMapping.effort;
     if (_byokOpenAiEffort) {
       return {
         requestedEffort: _byokRequestedEffort,
         effectiveEffort: _byokOpenAiEffort,
-        control: "openai-reasoning-effort",
+        control: "chat-reasoning-effort",
         parameter: "reasoning_effort",
         protocol: _byokProtocol,
         modelId: _byokModelId,
@@ -18902,11 +18896,11 @@ var zs = Q((_0x5ab287, _0x89421d) => {
     return {
       requestedEffort: _byokRequestedEffort,
       effectiveEffort: "",
-      control: "upstream-model-id",
+      control: _byokMapping.recognized ? "unsupported-effort" : "upstream-model-id",
       parameter: "omitted",
       protocol: _byokProtocol,
       modelId: _byokModelId,
-      verification: "provider-unconfirmed"
+      verification: _byokMapping.recognized ? "unsupported-level" : "provider-unconfirmed"
     };
   }
   function _byokIsInternalCompactionRequest(_byokOptions = {}) {
@@ -19065,7 +19059,8 @@ var zs = Q((_0x5ab287, _0x89421d) => {
         continue;
       }
       if (_0x480f2b === "tool") {
-        let _0x7331c0 = { type: "tool_result", tool_use_id: String(_0x57463d.tool_call_id || ""), content: String(_0x57463d.content || "") };
+        let _byokToolContent = Array.isArray(_0x57463d.content) ? _0x1b5e9a(_0x57463d.content) : String(_0x57463d.content || "");
+        let _0x7331c0 = { type: "tool_result", tool_use_id: String(_0x57463d.tool_call_id || ""), content: _byokToolContent };
         if (_0x57463d.is_error) _0x7331c0.is_error = true;
         _0x3c185f("user", [_0x7331c0]);
         continue;
@@ -19687,55 +19682,8 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       }
     };
   }
-  function _0x4b59a6(_0x516599) {
-    let _0x314d27 = [];
-    let _0x3ac188 = String(_0x516599 || "");
-    while (true) {
-      let _0x54bcc0 = _0x3ac188.search(/\r?\n\r?\n/);
-      if (_0x54bcc0 < 0) {
-        break;
-      }
-      let _0x44fb96 = _0x3ac188.slice(0, _0x54bcc0);
-      _0x3ac188 = _0x3ac188.slice(_0x54bcc0).replace(/^\r?\n\r?\n/, "");
-      let _0x59e472 = [];
-      for (let _0x331166 of _0x44fb96.split(/\r?\n/)) {
-        if (_0x331166.startsWith("data:")) {
-          _0x59e472.push(_0x331166.slice(5).replace(/^ /, ""));
-        }
-      }
-      if (!_0x59e472.length) {
-        continue;
-      }
-      let _0x33596d = _0x59e472.join("\n").trim();
-      if (_0x33596d) {
-        if (_0x33596d === "[DONE]") {
-          _0x314d27.push({
-            done: true,
-            data: null
-          });
-          continue;
-        }
-        try {
-          let _0x447702 = JSON.parse(_0x33596d);
-          if (_0x447702 && _0x447702.error) {
-            _0x314d27.push({
-              done: false,
-              data: _0x447702,
-              error: _0x447702.error
-            });
-          } else {
-            _0x314d27.push({
-              done: false,
-              data: _0x447702
-            });
-          }
-        } catch {}
-      }
-    }
-    return {
-      events: _0x314d27,
-      rest: _0x3ac188
-    };
+  function _0x4b59a6(input) {
+    return require('./provider-stream.cjs').parseSseBuffer(input);
   }
   function _0x172937(_0x502e48, _0x5ab28b) {
     for (let _0x2ff1e6 of _0x5ab28b || []) {
@@ -19956,7 +19904,9 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       let _0x2b750e = false;
       let _0x35862a = null;
       let _0x47c223 = false;
+      const _byokTransportAbort = () => _0x5a4852(new Error('aborted'));
       let _0x554f2c = () => {
+        _0x13bf86.signal?.removeEventListener('abort', _byokTransportAbort);
         if (_0x5b7a15) {
           clearTimeout(_0x5b7a15);
           _0x5b7a15 = null;
@@ -20014,6 +19964,8 @@ var zs = Q((_0x5ab287, _0x89421d) => {
         _0x1d8aee(null);
         _0x186192();
       };
+      if (_0x13bf86.signal?.aborted) { _byokTransportAbort(); return; }
+      _0x13bf86.signal?.addEventListener('abort', _byokTransportAbort, { once: true });
       _0x5b7a15 = setTimeout(() => {
         _0x5a4852(new Error("timeout " + _0x10b4dc + "ms"));
       }, _0x10b4dc);
@@ -20027,8 +19979,10 @@ var zs = Q((_0x5ab287, _0x89421d) => {
         if (_0x52c527) {
           return _0x5a4852(_0x52c527);
         }
+        if (_0x47c223) { _0x49d0be.destroy(); return; }
         _0x46de90 = _0x49d0be;
         let _0x54f055 = _0x2a255c => {
+          if (_0x47c223) { _0x2a255c.destroy(); return; }
           _0x46de90 = _0x2a255c;
           let _0xb2dffa = _0x43980a === "https:" ? 443 : 80;
           let _0x22fa02 = _0x13bf86.hostHeader || (_0x441590 === _0xb2dffa ? _0x444a1f : _0x444a1f + ":" + _0x441590);
@@ -20352,6 +20306,8 @@ var zs = Q((_0x5ab287, _0x89421d) => {
     return _0x113a51 || (_0x6cf357 && _0x6cf357.length <= 160 && !/^</.test(_0x6cf357) ? _0x6cf357.slice(0, 160) : _0x524c37(_0x2071b9));
   }
   function _0x237979(_0x28580f = {}) {
+    const cloudError = require('./public-errors.cjs').formatManagedError(_0x28580f);
+    if (cloudError !== null) return cloudError;
     let _0x1ff468 = Number(_0x28580f.status) > 0 ? Number(_0x28580f.status) : 0;
     let _0x33ef54 = _0x270997(String(_0x28580f.error || "").trim()).replace(/\s+/g, " ").slice(0, 280).trim();
     if (_0x1ff468 && _0x33ef54) {
@@ -20388,6 +20344,52 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       return String(_0x1a128e);
     }
   }
+  // Chat Completions compatible relays commonly accept image_url on user
+  // messages but ignore image_url inside a tool result. Keep the tool reply
+  // (and its call id) in place, then deliver its image once as a user-format
+  // content block immediately after that reply. This is a transport-only
+  // representation; the native conversation is not modified.
+  function _byokChatToolImageCompat(messages) {
+    if (!Array.isArray(messages)) return messages;
+    var changed = false;
+    var out = [];
+    var pendingImages = [];
+    var flushImages = () => {
+      if (!pendingImages.length) return;
+      out.push({
+        role: "user",
+        content: [
+          { type: "text", text: "Images returned by the preceding tool results. Use them to continue the existing user request." },
+          ...pendingImages
+        ]
+      });
+      pendingImages = [];
+    };
+    for (var i = 0; i < messages.length; i++) {
+      var message = messages[i];
+      if (!message || message.role !== "tool") {
+        flushImages();
+        out.push(message);
+        continue;
+      }
+      if (!Array.isArray(message.content)) {
+        out.push(message);
+        continue;
+      }
+      var images = message.content.filter(part => part && part.type === "image_url" && part.image_url);
+      if (!images.length) {
+        out.push(message);
+        continue;
+      }
+      changed = true;
+      var textParts = message.content.filter(part => part && part.type !== "image_url");
+      var text = textParts.map(part => part.type === "text" ? String(part.text || "") : "").filter(Boolean).join("\n");
+      out.push({ ...message, content: text || "[image returned by tool]" });
+      pendingImages.push(...images);
+    }
+    flushImages();
+    return changed ? out : messages;
+  }
   function _0x158b32(_0x1c8701 = {}) {
     let _0xce44c = _0x1c8701.cfg || {};
     let {
@@ -20405,7 +20407,7 @@ var zs = Q((_0x5ab287, _0x89421d) => {
           return {
             role: "tool",
             tool_call_id: String(_0x57463d.tool_call_id || ""),
-            content: typeof _0x57463d.content == "string" ? _0x57463d.content : String(_0x57463d.content || "")
+            content: _0x1980e1(_0x57463d.content)
           };
         } else if (Array.isArray(_0x57463d.tool_calls) && _0x57463d.tool_calls.length) {
           let _0x4c2a8e = {
@@ -20450,10 +20452,13 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       }];
     }
     let _0xbyokFinal = (_0x1c8701.identity && _0x1c8701.identity.uid) ? _0x52cdf3(_0x225caa, _0x1c8701.identity) : _0x225caa;
+    if (_0x2c4e6a(_0xce44c) === "openai") _0xbyokFinal = _byokChatToolImageCompat(_0xbyokFinal);
     try {
-      // [self-use] vision-compat: the kimi-k3 relay rejects image requests when a
-      // system message is present or when an image block has no sibling text.
-      // Drop system messages and append a short text hint to image-only user messages.
+      // [compat] The kimi-k3 relay rejects image requests with system
+      // messages. Other relays need their system context, including task
+      // continuity guards, so remove system messages only for kimi-k3.
+      // All image-only user messages receive a short sibling text block.
+      var _byokKimiVisionCompat = _byokResolveModelCapabilities(_0xce44c).reasoningDialect === "kimi-k3";
       var _0xbyokHasImage = false;
       for (var _0xbyi = 0; _0xbyi < _0xbyokFinal.length; _0xbyi++) {
         var _0xbyMsg = _0xbyokFinal[_0xbyi];
@@ -20466,10 +20471,14 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       }
       if (_0xbyokHasImage) {
         var _0xbyokOut = [];
+        var _byokKimiGuardText = [];
         for (var _0xbyk = 0; _0xbyk < _0xbyokFinal.length; _0xbyk++) {
           var _0xbyMsg2 = _0xbyokFinal[_0xbyk];
           if (!_0xbyMsg2 || !_0xbyMsg2.role) continue;
-          if (_0xbyMsg2.role === "system") continue;
+          if (_0xbyMsg2.role === "system" && _byokKimiVisionCompat) {
+            if (/^\[BYOK (?:task continuity|execution guard)\]/.test(String(_0xbyMsg2.content || ""))) _byokKimiGuardText.push(String(_0xbyMsg2.content));
+            continue;
+          }
           if (_0xbyMsg2.role === "user" && Array.isArray(_0xbyMsg2.content)) {
             var _0xbyHasImg2 = false;
             var _0xbyHasTxt2 = false;
@@ -20485,6 +20494,16 @@ var zs = Q((_0x5ab287, _0x89421d) => {
             }
           }
           _0xbyokOut.push(_0xbyMsg2);
+        }
+        if (_byokKimiGuardText.length) {
+          for (var _byokGuardIndex = _0xbyokOut.length - 1; _byokGuardIndex >= 0; _byokGuardIndex--) {
+            var _byokGuardTarget = _0xbyokOut[_byokGuardIndex];
+            if (!_byokGuardTarget || _byokGuardTarget.role !== "user") continue;
+            var _byokGuardContent = _byokGuardTarget.content;
+            var _byokGuardSuffix = _byokKimiGuardText.join("\n\n");
+            _0xbyokOut[_byokGuardIndex] = { ..._byokGuardTarget, content: Array.isArray(_byokGuardContent) ? [..._byokGuardContent, { type: "text", text: _byokGuardSuffix }] : String(_byokGuardContent || "") + "\n\n" + _byokGuardSuffix };
+            break;
+          }
         }
         _0xbyokFinal = _0xbyokOut;
       }
@@ -20515,7 +20534,7 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       _0x52e734.push({
         id: String(_0x47bf11.id || ""),
         name: String(_0x47ee36),
-        arguments_json: _0x425ff0 || "{}"
+        arguments_json: __byokSubagentToolCalls.normalizeArguments(_0x47ee36, _0x425ff0 || "{}")
       });
     }
     return _0x52e734;
@@ -20606,19 +20625,16 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       if (!_byokMessage || typeof _byokMessage !== "object") continue;
       let _byokRole = String(_byokMessage.role || "user");
       if (_byokRole === "tool") {
+        let _byokToolOutput = _byokResponsesContent(_byokMessage.content, "user");
         _byokInput.push({
           type: "function_call_output",
           call_id: String(_byokMessage.tool_call_id || ""),
-          output: _byokResponsesText(_byokMessage.content)
+          output: _byokToolOutput.some(_byokBlock => _byokBlock.type === "input_image") ? _byokToolOutput : _byokResponsesText(_byokMessage.content)
         });
         continue;
       }
-      if (_byokRole === "assistant" && _byokMessage.reasoning_content) {
-        _byokInput.push({
-          type: "reasoning",
-          content: [{ type: "reasoning_text", text: String(_byokMessage.reasoning_content) }]
-        });
-      }
+      // Reasoning summaries are presentation data. Keep the next request to
+      // the visible conversation and tool transcript.
       let _byokContent = _byokResponsesContent(_byokMessage.content, _byokRole);
       if (_byokContent.length) _byokInput.push({ type: "message", role: _byokRole, content: _byokContent });
       if (_byokRole === "assistant") {
@@ -20659,12 +20675,13 @@ var zs = Q((_0x5ab287, _0x89421d) => {
     let _byokBody = {
       model: _byokCfg.model,
       input: _byokChatMessagesToResponsesInput(_byokMessages),
-      max_output_tokens: Array.isArray(_byokOptions.messages) && _byokOptions.messages.length ? 16384 : 512
+      max_output_tokens: Array.isArray(_byokOptions.messages) && _byokOptions.messages.length ? 16384 : 512,
+      store: false
     };
     let _byokCapabilities = _byokResolveModelCapabilities(_byokCfg);
     let _byokRequested = _0x5c8e2a(_byokOptions.identity);
     let _byokEffort = _byokCapabilities.reasoningDialect === "deepseek-chat" ? _byokMapDeepSeekEffort(_byokRequested) : _0x1e6a4b(_byokOptions.identity, _byokCfg);
-    if (_byokEffort) _byokBody.reasoning = { effort: _byokEffort };
+    if (_byokEffort && !_byokIsInternalCompactionRequest(_byokOptions)) _byokBody.reasoning = { effort: _byokEffort, summary: 'auto' };
     let _byokTools = _byokResponsesTools(_byokOptions.tools);
     if (_byokTools.length) {
       _byokBody.tools = _byokTools;
@@ -20681,7 +20698,7 @@ var zs = Q((_0x5ab287, _0x89421d) => {
     for (let _byokItem of Array.isArray(_byokResponse && _byokResponse.output) ? _byokResponse.output : []) {
       if (!_byokItem || typeof _byokItem !== "object") continue;
       if (_byokItem.type === "reasoning") {
-        _byokReasoning += _byokResponsesText(_byokItem.content || _byokItem.summary);
+        _byokReasoning += _byokResponsesText(Array.isArray(_byokItem.content) && _byokItem.content.length ? _byokItem.content : _byokItem.summary);
       } else if (_byokItem.type === "message") {
         for (let _byokBlock of Array.isArray(_byokItem.content) ? _byokItem.content : []) {
           if (_byokBlock && (_byokBlock.type === "output_text" || _byokBlock.type === "text")) _byokText += String(_byokBlock.text || "");
@@ -20991,7 +21008,39 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       ..._0x268f04
     };
   }
-  async function _0x3a1ac9(_0x584c44 = {}) {
+  async function _0x3a1ac9(options = {}) {
+    const streams = require('./provider-stream.cjs');
+    options = { ...options, requestId: options.requestId || require('node:crypto').randomUUID() };
+    let protocol = _0x2c4e6a(options.cfg || {});
+    if (protocol === 'openai_responses' && _byokIsInternalCompactionRequest(options)) protocol = 'openai';
+    const call = streams.createCall({
+      source: 'local', protocol, model: options.cfg && options.cfg.model,
+      requestId: options.requestId, sessionId: options.sessionId,
+      attempt: options.attempt, signal: options.signal,
+      onEvent: options.onModelEvent, onRecord: options.onCallRecord
+    });
+    const abort = () => call.cancel();
+    options.signal?.addEventListener('abort', abort, { once: true });
+    const forwarded = { ...options, _byokCall: call, _byokOriginalOptions: options };
+    for (const name of ['onTextDelta', 'onReasoningDelta', 'onSignatureDelta', 'onToolCallReady', 'onPrepDone']) {
+      if (typeof options[name] === 'function') forwarded[name] = value => { if (call.canDeliver()) options[name](value); };
+    }
+    forwarded.onHeaders = value => { call.headers(value.status); if (call.canDeliver()) options.onHeaders?.(value); };
+    try {
+      const result = await _byokStreamImplementation(forwarded);
+      if (options.signal?.aborted) { call.cancel(); result.ok = false; result.error = 'aborted'; }
+      call.result(result);
+      call.finish(result.ok ? 'completed' : 'error', result.ok ? result.finishReason : /timeout/i.test(result.error || '') ? 'timeout' : result.streamed && !call.hasTerminal() ? 'missing-terminal' : 'upstream-error');
+      result.callRecord ||= call.snapshot();
+      return result;
+    } catch (error) {
+      call.finish('error', 'adapter-error');
+      throw error;
+    } finally {
+      options.signal?.removeEventListener('abort', abort);
+    }
+  }
+  async function _byokStreamImplementation(_0x584c44 = {}) {
     let _0x202cf9 = _0x39cc21(_0x584c44, {
       stream: true
     });
@@ -21032,7 +21081,13 @@ var zs = Q((_0x5ab287, _0x89421d) => {
         });
       } catch {}
     }
+    const _byokCall = _0x584c44._byokCall;
     let _0x151637 = _0x584c44.signal || null;
+    const _byokRestore = _0x39cb30;
+    _0x39cb30 = () => {
+      _0x151637?.removeEventListener('abort', _0x2965ce);
+      _byokRestore();
+    };
     let _0x2373d6 = _0x254406.protocol === "https:" ? 443 : 80;
     let _0x2ecc02 = _0x254406.port ? Number(_0x254406.port) : _0x2373d6;
     let _0x47a485 = null;
@@ -21062,17 +21117,20 @@ var zs = Q((_0x5ab287, _0x89421d) => {
         protocol: _0x254406.protocol,
         hostname: _0x254406.hostname,
         port: _0x2ecc02,
+        signal: _0x151637,
         path: "" + _0x254406.pathname + _0x254406.search,
         method: "POST",
         hostHeader: _0x254406.host,
         headers: _0x4a6d91 === "anthropic" ? {
           "content-type": "application/json",
           accept: "text/event-stream",
+          ...require("./cloud-managed.cjs").requestHeaders(_0x23c3c9, _0x584c44.sessionId),
           "x-api-key": _0x23c3c9.apiKey,
           "anthropic-version": String(_0x23c3c9.anthropicVersion || "2023-06-01")
         } : {
           "content-type": "application/json",
           accept: "text/event-stream",
+          ...require("./cloud-managed.cjs").requestHeaders(_0x23c3c9, _0x584c44.sessionId),
           authorization: "Bearer " + _0x23c3c9.apiKey
         },
         body: _0x4e6b62,
@@ -21167,8 +21225,10 @@ var zs = Q((_0x5ab287, _0x89421d) => {
           _0xb9b45b = JSON.parse(_0x268171);
         } catch {}
         if (_0x4a6d91 !== "anthropic" && _0xecd922 === 400 && _0x23c3c9.streamUsage !== false && /stream[_ -]?options|include[_ -]?usage|unknown (?:field|parameter)|extra inputs/i.test(_0x268171)) {
+          _byokCall.finish('error', 'unsupported-stream-options');
           return _0x3a1ac9({
-            ..._0x584c44,
+            ..._0x584c44._byokOriginalOptions,
+            attempt: (Number(_0x584c44.attempt) || 1) + 1,
             cfg: {
               ..._0x23c3c9,
               streamUsage: false
@@ -21219,14 +21279,14 @@ var zs = Q((_0x5ab287, _0x89421d) => {
       }
     };
     let _0x2296c5 = () => {
-      if (_0x541a91) {
+      if (_0x541a91 && _byokCall.canDeliver() && _byokCall.hasTerminal()) {
         _0x4cea21(_0x586c21, _0x174ff1, _0x541a91, {
           finalize: true
         });
       }
     };
     try {
-      for await (let _0x1546ff of _0x47a485) {
+      for await (let _0x1546ff of require('./provider-stream.cjs').utf8Chunks(_0x47a485)) {
         if (_0x151637 && _0x151637.aborted) {
           _0x2965ce();
           _0x39cb30();
@@ -21254,6 +21314,7 @@ var zs = Q((_0x5ab287, _0x89421d) => {
         let _0x443dc1 = _0x4b59a6(_0x37b24e);
         _0x37b24e = _0x443dc1.rest;
         for (let _0x9356b7 of _0x443dc1.events) {
+          if (!_byokCall.observe(_0x9356b7)) continue;
           if (_0x9356b7.done) {
             _0x15153e = true;
             _0x2296c5();
@@ -21322,6 +21383,10 @@ var zs = Q((_0x5ab287, _0x89421d) => {
             }
             if (_byokEventType === "response.completed") {
               let _byokParsed = _byokParseResponsesResult(_0x51c2cf.response || {});
+              if (_byokParsed.reasoning && !_0x3f728e) {
+                _0x3f728e = _byokParsed.reasoning;
+                if (_0x4d9e2a) { try { _0x4d9e2a(_byokParsed.reasoning); } catch {} }
+              }
               for (let _byokCall of _byokParsed.toolCalls) {
                 _byokRegisterResponseCall({ type: "function_call", call_id: _byokCall.id, name: _byokCall.name, arguments: _byokCall.arguments_json }, {});
               }
@@ -21497,7 +21562,7 @@ var zs = Q((_0x5ab287, _0x89421d) => {
         error: _0x44da1c
       });
     }
-    if (_0x4a6d91 === "openai_responses" && !_0x15153e) {
+    if (!_byokCall.hasTerminal()) {
       _0x2296c5();
       let _byokInterruptedCalls = _0x43d768(Object.keys(_0x586c21).sort((_byokLeft, _byokRight) => Number(_byokLeft) - Number(_byokRight)).map(_byokIndex => ({
         id: _0x586c21[_byokIndex].id,
@@ -21517,7 +21582,7 @@ var zs = Q((_0x5ab287, _0x89421d) => {
         finishReason: _0x3d54fa || "incomplete",
         raw: _0x5dbe2b,
         streamed: true,
-        error: "Responses stream interrupted before terminal event"
+        error: _byokCall.eofError()
       });
     }
     _0x2296c5();
@@ -21559,6 +21624,7 @@ var zs = Q((_0x5ab287, _0x89421d) => {
     pickAssistantResult: _0x40e8e9,
     normalizeToolCalls: _0x43d768,
     buildChatMessages: _0x158b32,
+    buildAnthropicBody: _0x4e2f3c,
     isFixedSamplingModel: _0x2d42ef,
     defaultSamplingFields: _0x5decec,
     createDirectHttpAgent: _0x15ddb1,
@@ -21578,6 +21644,7 @@ var zs = Q((_0x5ab287, _0x89421d) => {
     reasoningCapabilityDiagnostic: _byokReasoningCapabilityDiagnostic,
     resolveModelCapabilities: _byokResolveModelCapabilities,
     applyReasoningControls: _byokApplyReasoningControls,
+    buildResponsesBody: _byokBuildResponsesBody,
     normalizeOpenAIUsage: _byokNormalizeOpenAIUsage,
     prepareChatRequest: _0x39cc21,
     aggregateStreamToolCallDeltas: _0x172937,
@@ -22477,7 +22544,7 @@ var Zs = Q((_0x5b8578, _0x3ed769) => {
     return _0x18fcae;
   }
 
-  // [self-use] __BYOK_VISION_PATCH__
+  // [compat] __BYOK_VISION_PATCH__
   // Images enter this long-lived daemon as Base64.  Keep every retention point
   // bounded: a single oversized paste previously remained reachable forever
   // when the following chat request never arrived.
@@ -22720,6 +22787,10 @@ var Zs = Q((_0x5b8578, _0x3ed769) => {
   function _0x3b6cd3(_0x3a2531) {
     let _0x35985b = _0x3a2531.source;
     let _0x2aceaf = _0x429090(_0x3a2531.prompt);
+    let _byokWireImages = (_0x3a2531.images || []).filter(_byokImage => _byokImage && String(_byokImage.base64_data || "").trim()).map(_byokImage => ({
+      type: "image_url",
+      image_url: { url: "data:" + (String(_byokImage.mime_type || "").trim() || "image/png") + ";base64," + String(_byokImage.base64_data).trim() }
+    }));
     if (_0x35985b === _0x839159.SYSTEM_PROMPT || _0x35985b === _0x839159.UNSPECIFIED) {
       return null;
     }
@@ -22727,7 +22798,7 @@ var Zs = Q((_0x5b8578, _0x3ed769) => {
       let _0x7331c0 = {
         role: "tool",
         tool_call_id: _0x3a2531.toolCallId || "tool",
-        content: _0x2aceaf
+        content: _byokWireImages.length ? [...(_0x2aceaf ? [{ type: "text", text: _0x2aceaf }] : []), ..._byokWireImages] : _0x2aceaf
       };
       if (_0x3a2531.toolResultIsError) {
         _0x7331c0.is_error = true;
@@ -22735,22 +22806,9 @@ var Zs = Q((_0x5b8578, _0x3ed769) => {
       return _0x7331c0;
     }
     if (_0x35985b === _0x839159.USER) {
-      let _0x431cf4 = [];
-      for (let _0x5d9ff3 of _0x3a2531.images || []) {
-        let _0x2df458 = String(_0x5d9ff3 && _0x5d9ff3.base64_data || "").trim();
-        if (!_0x2df458) {
-          continue;
-        }
-        let _0x2d48ac = String(_0x5d9ff3 && _0x5d9ff3.mime_type || "").trim() || "image/png";
-        _0x431cf4.push({
-          type: "image_url",
-          image_url: {
-            url: "data:" + _0x2d48ac + ";base64," + _0x2df458
-          }
-        });
-      }
+      let _0x431cf4 = _byokWireImages.slice();
       
-      // [self-use] 本地图片路径自动转图片内容（绕过客户端附件限制）
+      // [compat] 本地图片路径自动转图片内容（绕过客户端附件限制）
       try {
         var _0xlocRe = /(?:[A-Za-z]:[\\/]|\/|~[\\/])[^"'\r\n|<>]*?\.(?:jpe?g|png|gif|webp|bmp)(?=$|[\s"'!?,)]|[^\x00-\x7F])/gi;
         var _0xlocTxt = String(_0x2aceaf || "");
@@ -23032,6 +23090,7 @@ if (_0x431cf4.length > 0) {
         ok: true,
         source: "proto",
         reason: "",
+         systemPrompt: _0x4d66d4.systemPrompt || "",
         messages: _0x4d66d4.messages,
         messageIds: _0x4d66d4.messageIds,
         prompt: _0x2db1fc.slice(0, _0x4af5d5),
@@ -24182,6 +24241,7 @@ var e0 = Q((_0x3a612e, _0x12d7d1) => {
         return _0xfb89d8(_0x16c4fd);
       },
       abortWithError(_0x4d047f) {
+        _0x4d047f = require('./public-errors.cjs').forManaged(_0x4d047f);
         if (_0x347c62) {
           return !_0x4e105b;
         }
@@ -26310,6 +26370,15 @@ var k0 = Q((_0x443bc4, _0x2690d7) => {
       };
     }
     let _0x248a31 = _0xe495d5(_0x1be6df, _0x482f13);
+    let _byokBoundLimits = _0x1b5a6f && _0x1b5a6f.contextLimits;
+    let _byokBoundLimit = Math.floor(Number(_byokBoundLimits && _byokBoundLimits[_0x482f13]) || 0);
+    if (_byokBoundLimit > 0) {
+      _0x248a31 = {
+        limit: Math.min(_byokMaxContext, _byokBoundLimit),
+        selectedUid: _0x482f13,
+        source: "binding-explicit"
+      };
+    }
     if (!(_0x248a31.limit > 0)) {
       return {
         buf: _0x3753eb,
@@ -26657,7 +26726,11 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     diagnoseSessionChoice: _byokDiagnoseSessionChoice,
     readCascadeChoice: _byokReadCascadeChoice,
     diagnoseCascadeChoice: _byokDiagnoseCascadeChoice,
+    claimCascadeForRecentExplicitSelection: _byokClaimCascadeForRecentExplicitSelection,
+    bindCascadeToSession: _byokBindCascadeToSession,
+    registerPromptIdentity: _byokRegisterPromptIdentity,
     resolveSessionFromMessageIds: _byokResolveSessionFromMessageIds,
+    resolveRequestSessionIdentity: _byokResolveRequestSessionIdentity,
     readPersistedSessionContext: _byokReadPersistedSessionContext,
     resolveContextConversationId: _byokResolveContextConversationId,
     resolveIdentityModel: _0x5152cb,
@@ -26805,16 +26878,57 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     if (_byokSessionId) return "metadata:" + _byokSessionId;
     let _byokRequestId = String(_byokParsed && _byokParsed.requestId || "").trim().slice(0, 512);
     if (_byokRequestId) return "request:" + _byokRequestId;
+    // Current Devin compactor requests often omit session_id/request_id while
+    // retaining one of the other stable conversation lineage fields.  Using
+    // those fields lets official-first fallback resolve the same model route
+    // instead of silently degrading to official-only.
+    for (let [_byokLabel, _byokValue] of [
+      ["cascade", _byokParsed && _byokParsed.cascadeId],
+      ["prompt", _byokParsed && _byokParsed.promptId],
+      ["execution", _byokParsed && _byokParsed.executionId]
+    ]) {
+      let _byokId = String(_byokValue || "").trim().slice(0, 512);
+      if (_byokId) return _byokLabel + ":" + _byokId;
+    }
+    let _byokMessageIds = Array.isArray(_byokParsed && _byokParsed.messageIds) ? _byokParsed.messageIds.map(_byokId => String(_byokId || "").trim()).filter(Boolean) : [];
+    if (_byokMessageIds.length) return "message:" + _byokMessageIds[0].slice(0, 512);
     return String(_byokFallback || "").trim();
   }
   function _byokSafeProtocolId(_byokValue) {
     let _byokId = String(_byokValue || "").trim();
     return _byokId ? _byokExecutionHash(_byokId).slice(0, 16) : "none";
   }
-  function _byokOfficialCompactorOutcome(_byokStatus, _byokBytes, _byokNormalEnd = true) {
+  function _byokValidateOfficialCompactorPayload(_byokStatus, _byokHeaders, _byokBody) {
+    let _byokCode = Number(_byokStatus) || 0;
+    let _byokBuffer = Buffer.isBuffer(_byokBody) ? _byokBody : Buffer.from(_byokBody || "");
+    if (_byokCode < 200 || _byokCode >= 300) return { valid: false, reason: "http-" + _byokCode };
+    if (!_byokBuffer.length) return { valid: false, reason: "empty" };
+    let _byokContentType = String(_byokHeaders && (_byokHeaders["content-type"] || _byokHeaders["Content-Type"]) || "").toLowerCase();
+    let _byokPrefix = _byokBuffer.subarray(0, Math.min(_byokBuffer.length, 1024)).toString("utf8").trim();
+    if (/(?:text\/html|text\/plain)/i.test(_byokContentType) || /^\s*(?:<!doctype\s+html|<html\b)/i.test(_byokPrefix)) {
+      return { valid: false, reason: "unexpected-text-response" };
+    }
+    if (/json/i.test(_byokContentType) || /^[\[{]/.test(_byokPrefix)) {
+      try {
+        let _byokJson = JSON.parse(_byokBuffer.toString("utf8"));
+        if (_byokJson && (_byokJson.error || _byokJson.ok === false)) return { valid: false, reason: "json-error" };
+        return { valid: true, reason: "json" };
+      } catch {
+        if (/json/i.test(_byokContentType)) return { valid: false, reason: "invalid-json" };
+      }
+    }
+    if (/(?:protobuf|proto|grpc|octet-stream|connect)/i.test(_byokContentType)) return { valid: true, reason: "protobuf-content-type" };
+    if (_byokBuffer.length >= 5 && (_byokBuffer[0] === 0 || _byokBuffer[0] === 1 || _byokBuffer[0] === 2 || _byokBuffer[0] === 3)) {
+      let _byokFrameLength = _byokBuffer.readUInt32BE(1);
+      if (_byokFrameLength > 0 && _byokFrameLength <= _byokBuffer.length - 5) return { valid: true, reason: "framed-protobuf" };
+    }
+    return { valid: false, reason: "unrecognized-payload" };
+  }
+  function _byokOfficialCompactorOutcome(_byokStatus, _byokBytes, _byokNormalEnd = true, _byokValidation = null) {
     let _byokCode = Number(_byokStatus) || 0;
     let _byokSize = Math.max(0, Number(_byokBytes) || 0);
     if (!_byokNormalEnd) return { outcome: "unknown", transportOk: false, status: _byokCode, bytes: _byokSize };
+    if (_byokValidation && _byokValidation.valid === false) return { outcome: "fail", transportOk: true, status: _byokCode, bytes: _byokSize, validation: _byokValidation.reason || "invalid" };
     if (_byokCode >= 200 && _byokCode < 300 && _byokSize > 0) {
       return { outcome: "ok", transportOk: true, status: _byokCode, bytes: _byokSize };
     }
@@ -26902,9 +27016,34 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     }
     return Math.min(_byokMax, Math.max(_byokMin, _byokNumber));
   }
+  function _byokHistoryFallbackMode() {
+    // Preserve Devin's native plan/compactor history by default.  The old
+    // behaviour compacted every normal request once a local estimate crossed
+    // the threshold, even when Devin had already scheduled its own compactor.
+    // Keep that proactive mode available only as an explicit compatibility
+    // override; the default safety net is a single retry after a verified
+    // upstream context-limit rejection and before any output was emitted.
+    let _byokValue = String(process.env.BYOK_LOCAL_HISTORY_FALLBACK ?? "error-only").trim().toLowerCase();
+    if (new Set(["0", "false", "off", "no", "disabled"]).has(_byokValue)) return "off";
+    if (new Set(["1", "true", "on", "yes", "proactive", "legacy"]).has(_byokValue)) return "proactive";
+    return "error-only";
+  }
   function _byokHistoryFallbackEnabled() {
-    let _byokValue = String(process.env.BYOK_LOCAL_HISTORY_FALLBACK ?? "1").trim().toLowerCase();
-    return !new Set(["0", "false", "off", "no"]).has(_byokValue);
+    return _byokHistoryFallbackMode() === "proactive";
+  }
+  function _byokIsContextLimitFailure(_byokResult) {
+    if (!_byokResult || _byokResult.ok) return false;
+    let _byokStatus = Number(_byokResult.status) || 0;
+    let _byokError = String(_byokResult.error || "");
+    // A gateway can use 413 for its own HTTP body-size cap. Only treat it as
+    // context pressure when the provider does not identify another payload
+    // limit, otherwise compaction would destroy history without helping.
+    if (_byokStatus === 413) return !/(?:upload|file|image|attachment|http\s*body|request\s*body|payload\s*bytes?|max(?:imum)?\s*(?:body|upload|file)\s*size)/i.test(_byokError);
+    if (!new Set([400, 422, 429]).has(_byokStatus)) return false;
+    // Token-per-minute/request rate limits are capacity errors, not context
+    // errors. They frequently contain the words "token" and "limit".
+    if (/(?:tokens?\s*per\s*(?:minute|second|day)|\bTPM\b|\bRPM\b|rate[_\s-]*limit|quota|requests?\s*per\s*(?:minute|second|day))/i.test(_byokError)) return false;
+    return /(?:context(?:[_\s-]*(?:length|window|limit))?|maximum\s+context|too\s+many\s+tokens|token(?:s)?\s+(?:limit|exceed)|input(?:[_\s-]*tokens?)?\s+(?:too\s+long|exceed)|prompt\s+(?:too\s+long|exceed)|reduce\s+(?:the\s+)?(?:length|number\s+of\s+tokens))/i.test(_byokError);
   }
   function _byokContentText(_byokValue, _byokDepth = 0) {
     if (_byokValue == null || _byokDepth > 4) {
@@ -26968,6 +27107,9 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
   }
   function _byokInjectResponseLanguage(_byokMessages, _byokLanguage) {
     let _byokItems = Array.isArray(_byokMessages) ? _byokMessages.map(_byokMessage => _byokMessage && typeof _byokMessage === "object" ? { ..._byokMessage } : _byokMessage) : [];
+    if (String(process.env.BYOK_LOCAL_RESPONSE_LANGUAGE_PROMPT || "").trim().toLowerCase() !== "on") {
+      return { messages: _byokItems, changed: false, language: _byokLanguage || "" };
+    }
     let _byokLanguageNames = { "zh-CN": "Simplified Chinese", ja: "Japanese", ko: "Korean", en: "English" };
     let _byokName = _byokLanguageNames[String(_byokLanguage || "")];
     if (!_byokName || _byokItems.some(_byokMessage => String(_byokMessage && _byokMessage.role || "") === "system" && /\[BYOK response language\]/.test(String(_byokMessage.content || "")))) {
@@ -26994,7 +27136,10 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       _byokContentText(_byokMessage.tool_call_id),
       _byokContentText(_byokMessage.name)
     ].filter(Boolean).join("\n");
-    return Math.max(1, Math.ceil(_byokText.length / 3)) + 12;
+    // Image payloads are not text tokens, but omitting them makes context
+    // thresholds look safe even for a conversation full of screenshots.
+    let _byokImageCount = Array.isArray(_byokMessage.content) ? _byokMessage.content.filter(_byokBlock => _byokBlock && ["image_url", "image", "input_image"].includes(_byokBlock.type)).length : 0;
+    return Math.max(1, Math.ceil(_byokText.length / 3)) + 12 + _byokImageCount * 1600;
   }
   function _byokHistoryTokenEstimate(_byokMessages) {
     return (Array.isArray(_byokMessages) ? _byokMessages : []).reduce((_byokTotal, _byokMessage) => _byokTotal + _byokMessageTokenEstimate(_byokMessage), 0);
@@ -27035,7 +27180,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     return _byokCalls;
   }
   function _byokIsOrchestrationToolName(_byokName) {
-    return /^(?:todo_write|update_plan|todo_list|update_todo_list)$/i.test(String(_byokName || "").trim());
+    return /^(?:todo_write|update_plan|todo_list|update_todo_list|plan|set_plan|write_plan|plan_update|task_list|tasks_write|update_tasks)$/i.test(String(_byokName || "").trim());
   }
   function _byokJsonText(_byokValue) {
     if (typeof _byokValue === "string") return _byokValue;
@@ -27079,6 +27224,57 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     if (_byokResultText) _byokContent += `\nresult: ${_byokResultText}`;
     _byokContent += "\n</last_todo_list>";
     return { role: "system", content: _byokContent };
+  }
+  function _byokPlanFilePaths(_byokValue) {
+    let _byokText = String(_byokValue || "");
+    let _byokPaths = [];
+    let _byokPatterns = [
+      /\]\(([^)\r\n]*\.md)(?:[:#]\d+)?\)/ig,
+      /`([^`\r\n]*\.md)(?:[:#]\d+)?`/ig,
+      /((?:[A-Za-z]:[\\/]|\.{0,2}[\\/])[^\s"'<>|]*\.md)(?:[:#]\d+)?/ig,
+      /\b((?:plan|todo|tasks?|roadmap|implementation|spec|milestones?|计划|规划|任务|清单|方案|里程碑)[\w.\-\u3400-\u9fff]*\.md)\b/ig
+    ];
+    for (let _byokPattern of _byokPatterns) {
+      let _byokMatch;
+      while ((_byokMatch = _byokPattern.exec(_byokText))) {
+        let _byokPath = String(_byokMatch[1] || "").trim().replace(/[),.;]+$/, "").slice(0, 1024);
+        if (_byokPath && !_byokPaths.includes(_byokPath)) _byokPaths.push(_byokPath);
+      }
+    }
+    return _byokPaths;
+  }
+  function _byokIsPlanLikePath(_byokPath) {
+    return /(?:plan|todo|tasks?|roadmap|implementation|spec|milestones?|计划|规划|任务|清单|方案|里程碑)/i.test(String(_byokPath || ""));
+  }
+  function _byokPreservedPlanFileMessage(_byokMessages, _byokSplitIndex) {
+    let _byokLatest = null;
+    let _byokItems = Array.isArray(_byokMessages) ? _byokMessages : [];
+    for (let _byokIndex = 0; _byokIndex < Math.min(_byokSplitIndex, _byokItems.length); _byokIndex += 1) {
+      let _byokMessage = _byokItems[_byokIndex];
+      if (!_byokMessage || typeof _byokMessage !== "object") continue;
+      if (_byokIsConversationUserMessage(_byokMessage)) {
+        let _byokText = _byokContentText(_byokMessage.content);
+        if (/(?:plan|todo|task|roadmap|implementation|spec|计划|规划|任务|清单|方案|里程碑|source\s+of\s+truth)/i.test(_byokText)) {
+          let _byokPaths = _byokPlanFilePaths(_byokText);
+          if (_byokPaths.length) _byokLatest = { index: _byokIndex, paths: _byokPaths.slice(-8), source: "user" };
+        }
+      }
+      for (let _byokCall of _byokToolCallsInMessage(_byokMessage)) {
+        if (!/(?:write|edit|patch|create|save)/i.test(String(_byokCall.name || ""))) continue;
+        let _byokResults = _byokMatchingToolResults(_byokItems, _byokIndex, _byokCall.id);
+        if (_byokCall.id && !_byokResults.length) continue;
+        // Native write_plan returns its generated path in the tool result,
+        // not in the plan argument. Preserve that path on overflow retry too.
+        let _byokPaths = _byokPlanFilePaths(_byokJsonText(_byokCall.arguments) + "\n" + _byokResults.join("\n")).filter(_byokIsPlanLikePath);
+        if (!_byokPaths.length) continue;
+        _byokLatest = { index: _byokIndex, paths: _byokPaths.slice(-8), source: "file-tool" };
+      }
+    }
+    if (!_byokLatest) return null;
+    return {
+      role: "system",
+      content: "[BYOK preserved plan-file checkpoint]\npaths:\n- " + _byokLatest.paths.join("\n- ") + "\nsource: " + _byokLatest.source + "\nThese plan files were explicitly referenced before the compacted prefix. Before changing files or declaring completion, read their current contents with the available file tools and follow their current scope, milestones, constraints, and acceptance criteria. Do not infer milestone completion from this checkpoint alone."
+    };
   }
   function _byokHistorySummary(_byokOlder, _byokMaxChars) {
     let _byokRows = [];
@@ -27165,7 +27361,9 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
   function _byokIsTemporaryInvestigationPath(_byokPathValue) {
     let _byokPathText = String(_byokPathValue || "").replace(/\\/g, "/").toLowerCase();
     let _byokBase = _byokPathText.split("/").pop() || "";
-    return /^(?:_+)?(?:probe|inspect|debug|diagnos|scratch|tmp|temp)(?:[_\-.]|$)/.test(_byokBase) || /(?:^|\/)(?:\.?(?:tmp|temp)|diagnostics?|scratch)(?:\/|$)/.test(_byokPathText);
+    // Workspaces can legitimately live under tmp/temp/scratch directories.
+    // Parent names alone do not tell us whether this edit is disposable work.
+    return /^(?:_+)?(?:probe|inspect|debug|diagnos|scratch|tmp|temp)(?:[_\-.]|$)/.test(_byokBase);
   }
   function _byokIsDiagnosticCommand(_byokCommandValue) {
     return /(?:^|[\/\s\"'=])(?:_+)?(?:probe|inspect|debug|diagnos|scratch|tmp|temp)[\w.\-]*\.(?:py|js|cjs|mjs|ps1|sh|sql)\b/i.test(String(_byokCommandValue || ""));
@@ -27254,7 +27452,8 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     let _byokText = _byokCurrent && (_byokCurrent.step ?? _byokCurrent.content ?? _byokCurrent.title ?? _byokCurrent.task ?? _byokCurrent.description) || (_byokArgs.current_step ?? _byokArgs.currentStep ?? "");
     _byokText = String(_byokText || "").replace(/\s+/g, " ").trim().slice(0, 500);
     let _byokPhase = /(?:test|verify|validation|build|lint|测试|验证|构建)/i.test(_byokText) ? "verify" : _byokText ? "implement" : "plan";
-    return { fingerprint: _byokExecutionHash(_byokJsonText(_byokArgs)), currentStep: _byokText, phase: _byokPhase };
+    let _byokIncomplete = _byokSteps.filter(_byokStep => _byokStep && /^(?:pending|todo|not_started|in_progress|in-progress|active|doing)$/i.test(String(_byokStep.status || "")));
+    return { fingerprint: _byokExecutionHash(_byokJsonText(_byokArgs)), currentStep: _byokText, phase: _byokPhase, incomplete: _byokIncomplete.map(_byokStep => String(_byokStep.step ?? _byokStep.content ?? _byokStep.title ?? _byokStep.task ?? _byokStep.description ?? "").replace(/\s+/g, " ").trim().slice(0, 240)).filter(Boolean).slice(0, 5), hasStatuses: _byokSteps.some(_byokStep => _byokStep && _byokStep.status) };
   }
   function _byokToolDefinitionName(_byokTool) {
     let _byokFn = _byokTool && _byokTool.function || _byokTool || {};
@@ -27340,6 +27539,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     if (!(_byokState.readCounts instanceof Map)) _byokState.readCounts = new Map();
     if (!(_byokState.failures instanceof Map)) _byokState.failures = new Map();
     if (!(_byokState.completedEvidenceKeys instanceof Set)) _byokState.completedEvidenceKeys = new Set();
+    if (!(_byokState.seenUserTexts instanceof Set)) _byokState.seenUserTexts = new Set();
     if (!_byokState.phase) _byokState.phase = "investigate";
     if (!Number.isFinite(_byokState.guardDeliveries)) _byokState.guardDeliveries = 0;
     for (let _byokId of _byokIdentity.callIds) _byokState.callIds.add(_byokId);
@@ -27358,6 +27558,20 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     let _byokNewCompletion = null;
     let _byokMessageIndex = 0;
     for (let _byokMessage of _byokItems) {
+      if (_byokIsConversationUserMessage(_byokMessage)) {
+        let _byokUserText = _byokContentText(_byokMessage.content).replace(/\s+/g, " ").trim();
+        let _byokUserHash = _byokUserText && _byokExecutionHash(_byokUserText);
+        if (_byokUserHash && !_byokState.seenUserTexts.has(_byokUserHash)) {
+          _byokState.seenUserTexts.add(_byokUserHash);
+          // Steering and added constraints normally belong to the same
+          // objective. Clear a plan only when the user explicitly replaces
+          // or cancels it; a new message alone is not a task boundary.
+          if (/(?:^|[。.!！\s])(?:取消(?:之前|原来|当前)?(?:的)?(?:任务|计划)|换个任务|另一个任务|新任务(?:是|：|:)|不要再做(?:之前|原来|当前)(?:的)?(?:任务|计划)|forget the previous task|cancel the (?:previous|current) task|switch to a new task|new task:)/i.test(_byokUserText)) {
+            _byokState.incompletePlanSteps = [];
+            _byokState.pendingVerification = "";
+          }
+        }
+      }
       let _byokCallIndex = 0;
       let _byokMessageStalled = false;
       let _byokMessageProgress = false;
@@ -27399,6 +27613,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
             _byokState.lastPlanFingerprint = _byokPlan.fingerprint;
             _byokState.currentStep = _byokPlan.currentStep;
             _byokState.phase = _byokPlan.phase;
+            if (_byokPlan.hasStatuses) _byokState.incompletePlanSteps = _byokPlan.incomplete;
           }
           if (_byokOutcome.status === "failed") {
             let _byokFailureKey = _byokExecutionFailureCategory(_byokCall, _byokOutcome);
@@ -27424,7 +27639,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
             _byokState.phase = "verify";
             _byokState.pendingVerification = String(_byokClass.target || "the applied change").slice(0, 500);
             _byokState.currentStep = "Verify the applied change";
-          } else if (_byokClass.reason === "test-or-build") {
+          } else if (_byokClass.reason === "test-or-build" && _byokOutcome.status === "success") {
             _byokState.phase = "implement";
             _byokState.pendingVerification = "";
             _byokState.currentStep = _byokState.currentStep && !/^Verify /i.test(_byokState.currentStep) ? _byokState.currentStep : "Continue the next structured plan step or report completion";
@@ -27456,6 +27671,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     while (_byokState.callIds.size > 256) _byokState.callIds.delete(_byokState.callIds.values().next().value);
     while (_byokState.messageIds.size > 256) _byokState.messageIds.delete(_byokState.messageIds.values().next().value);
     while (_byokState.completedEvidenceKeys.size > 128) _byokState.completedEvidenceKeys.delete(_byokState.completedEvidenceKeys.values().next().value);
+    while (_byokState.seenUserTexts.size > 128) _byokState.seenUserTexts.delete(_byokState.seenUserTexts.values().next().value);
     let _byokRepeated = [..._byokState.readCounts.entries()].sort((_byokA, _byokB) => _byokB[1] - _byokA[1])[0] || ["varied-investigation", 0];
     let _byokRepeatedFailure = [..._byokState.failures.entries()].sort((_byokA, _byokB) => _byokB[1] - _byokA[1])[0] || ["", 0];
     let _byokVerificationStalled = !!_byokState.pendingVerification && _byokState.readOnlyRequests >= 3;
@@ -27475,7 +27691,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       currentStep: _byokState.currentStep,
       pendingVerification: _byokState.pendingVerification,
       repeatedFailure: _byokRepeatedFailure[0],
-      content: "[BYOK execution guard]\n<execution_state>\nphase: " + _byokState.phase + "\ncurrent_step: " + (_byokState.currentStep || "perform the next concrete plan action") + "\npending_verification: " + (_byokState.pendingVerification || "none") + "\nrepeated_failure: " + (_byokRepeatedFailure[0] || "none") + "\nescalation_level: " + _byokGuardLevel + "\n</execution_state>\nThis is authoritative continuation state derived from structured plans and completed tool results, including compacted turns. " + _byokPhaseInstruction + (_byokGuardLevel >= 2 ? " Investigation-only tools are temporarily unavailable for this turn because the previous execution-state instruction was ignored." : " Read/search calls and temporary probe scripts do not advance this state.")
+      content: "[BYOK execution guard]\n<execution_state>\nphase: " + _byokState.phase + "\ncurrent_step: " + (_byokState.currentStep || "perform the next concrete plan action") + "\npending_verification: " + (_byokState.pendingVerification || "none") + "\nrepeated_failure: " + (_byokRepeatedFailure[0] || "none") + "\nescalation_level: " + _byokGuardLevel + "\n</execution_state>\nThis is authoritative continuation state derived from structured plans and completed tool results, including compacted turns. " + _byokPhaseInstruction + (_byokGuardLevel >= 2 ? " The previous execution-state reminder was ignored; make one concrete plan action now or state the blocker." : " Read/search calls and temporary probe scripts do not advance this state.")
     } : null;
     let _byokCheckpoint = _byokNewCompletion ? {
       kind: "completion",
@@ -27538,21 +27754,40 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
   }
   function _byokInjectExecutionLoopGuard(_byokMessages, _byokOptions = {}) {
     let _byokItems = Array.isArray(_byokMessages) ? _byokMessages.map(_byokMessage => _byokMessage && typeof _byokMessage === "object" ? { ..._byokMessage } : _byokMessage) : [];
-    // Keep loop statistics available for diagnostics, but do not claim that
-    // inspection is complete or override the model's native plan state.
-    void _byokOptions;
-    return { messages: _byokItems, guard: null };
+    // Native Devin owns plan execution. Extra continuity prompts are opt-in.
+    if (String(process.env.BYOK_LOCAL_EXECUTION_PROMPTS || "").trim().toLowerCase() !== "on") {
+      return { messages: _byokItems, guard: null };
+    }
+    let _byokState = _byokOptions.state;
+    let _byokStallGuard = _byokOptions.executionResult && _byokOptions.executionResult.guard;
+    let _byokPending = _byokState && Array.isArray(_byokState.incompletePlanSteps) ? _byokState.incompletePlanSteps : [];
+    let _byokVerification = String(_byokState && _byokState.pendingVerification || "").slice(0, 240);
+    if (!_byokPending.length && !_byokVerification && !_byokStallGuard) return { messages: _byokItems, guard: null };
+    // This is a request-side continuity reminder, not an ACP completion
+    // interception. Only structured native plan steps and actual edits feed it.
+    let _byokContent = (_byokPending.length || _byokVerification ? "[BYOK task continuity]\nThe latest native plan still has " + _byokPending.length + " open step(s)" + (_byokPending.length ? ": " + _byokPending.join(" | ") : "") + "." + (_byokVerification ? " The last edit still needs verification: " + _byokVerification + "." : "") + " Before a final completion claim, reconcile these with the user's current request and report concrete verification evidence. If a step cannot be finished, state the blocker and remaining work. Do not expand the task beyond the user's scope." : "") + (_byokStallGuard ? (_byokPending.length || _byokVerification ? "\n\n" : "") + _byokStallGuard.content : "");
+    let _byokIndex = 0;
+    while (_byokIndex < _byokItems.length && _byokItems[_byokIndex] && _byokItems[_byokIndex].role === "system") _byokIndex += 1;
+    _byokItems.splice(_byokIndex, 0, { role: "system", content: _byokContent });
+    return { messages: _byokItems, guard: _byokStallGuard ? { ..._byokStallGuard, kind: "execution-stall", pendingSteps: _byokPending.length } : { kind: "native-plan-continuity", pendingSteps: _byokPending.length, pendingVerification: !!_byokVerification } };
   }
   function _byokCompactLocalHistory(_byokMessages, _byokOptions = {}) {
     let _byokOriginal = Array.isArray(_byokMessages) ? _byokMessages : [];
     let _byokModelUid = String(_byokOptions.modelUid || "").trim();
     let _byokOriginalTokens = _byokHistoryTokenEstimate(_byokOriginal);
-    if (!_byokHistoryFallbackEnabled() || _byokOptions.enabled === false || _byokIsCompactionProtocolUid(_byokModelUid) || _byokOriginal.length < 12) {
-      return { messages: _byokOriginal, changed: false, beforeTokens: _byokOriginalTokens, afterTokens: _byokOriginalTokens, reason: _byokIsCompactionProtocolUid(_byokModelUid) ? "internal-compactor" : "disabled-or-small" };
+    let _byokExplicitlyEnabled = _byokOptions.enabled === true;
+    let _byokFallbackEnabled = _byokExplicitlyEnabled || (_byokOptions.enabled !== false && _byokHistoryFallbackEnabled());
+    if (!_byokFallbackEnabled || _byokIsCompactionProtocolUid(_byokModelUid) || _byokOriginal.length < 12) {
+      let _byokReason = _byokIsCompactionProtocolUid(_byokModelUid)
+        ? "internal-compactor"
+        : !_byokFallbackEnabled && _byokHistoryFallbackMode() === "error-only"
+          ? "native-fidelity-default"
+          : "disabled-or-small";
+      return { messages: _byokOriginal, changed: false, beforeTokens: _byokOriginalTokens, afterTokens: _byokOriginalTokens, reason: _byokReason };
     }
     let _byokContextTokens = _byokPositiveInt(_byokOptions.contextTokens ?? process.env.BYOK_LOCAL_CONTEXT_TOKENS, _byokDefaultContextTokens, 8192, _byokMaxContextTokens);
-    let _byokThresholdTokens = _byokPositiveInt(_byokOptions.thresholdTokens ?? process.env.BYOK_LOCAL_HISTORY_TRIGGER_TOKENS, Math.floor(_byokContextTokens * 0.78), 16000, _byokContextTokens);
-    let _byokTargetTokens = _byokPositiveInt(_byokOptions.targetTokens ?? process.env.BYOK_LOCAL_HISTORY_TARGET_TOKENS, Math.floor(_byokContextTokens * 0.58), 12000, _byokThresholdTokens);
+    let _byokThresholdTokens = _byokPositiveInt(_byokOptions.thresholdTokens ?? process.env.BYOK_LOCAL_HISTORY_TRIGGER_TOKENS, Math.floor(_byokContextTokens * 0.68), 16000, _byokContextTokens);
+    let _byokTargetTokens = _byokPositiveInt(_byokOptions.targetTokens ?? process.env.BYOK_LOCAL_HISTORY_TARGET_TOKENS, Math.floor(_byokContextTokens * 0.42), 12000, _byokThresholdTokens);
     if (_byokOriginalTokens < _byokThresholdTokens) {
       return { messages: _byokOriginal, changed: false, beforeTokens: _byokOriginalTokens, afterTokens: _byokOriginalTokens, thresholdTokens: _byokThresholdTokens, targetTokens: _byokTargetTokens, reason: "below-threshold" };
     }
@@ -27564,7 +27799,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     let _byokHeadTokens = _byokHistoryTokenEstimate(_byokHead);
     let _byokMinimumTurns = _byokPositiveInt(_byokOptions.minimumRecentTurns ?? process.env.BYOK_LOCAL_HISTORY_RECENT_TURNS, 4, 2, 12);
     let _byokTurnFloor = _byokRecentTurnFloor(_byokOriginal, _byokHeadEnd, _byokMinimumTurns);
-    if (_byokTurnFloor.turns < _byokMinimumTurns || _byokTurnFloor.index <= _byokHeadEnd) {
+    if (_byokTurnFloor.turns < 1 || _byokTurnFloor.index < _byokHeadEnd) {
       return { messages: _byokOriginal, changed: false, beforeTokens: _byokOriginalTokens, afterTokens: _byokOriginalTokens, reason: "insufficient-complete-turns" };
     }
     let _byokRecentBudget = Math.max(16000, _byokTargetTokens - _byokHeadTokens - 14000);
@@ -27582,14 +27817,15 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       _byokStart += 1;
     }
     _byokStart = Math.min(_byokStart, _byokTurnFloor.index);
-    if (_byokStart <= _byokHeadEnd || _byokStart >= _byokOriginal.length - 2) {
+    if (_byokStart < _byokHeadEnd || _byokStart >= _byokOriginal.length - 2) {
       return { messages: _byokOriginal, changed: false, beforeTokens: _byokOriginalTokens, afterTokens: _byokOriginalTokens, reason: "no-safe-user-boundary" };
     }
     let _byokSummaryChars = _byokPositiveInt(_byokOptions.summaryMaxChars ?? process.env.BYOK_LOCAL_HISTORY_SUMMARY_CHARS, 24000, 4000, 80000);
     let _byokOlder = _byokOriginal.slice(_byokHeadEnd, _byokStart);
     let _byokSummaryMessage = { role: "system", content: _byokHistorySummary(_byokOlder, _byokSummaryChars) };
     let _byokOrchestrationMessage = _byokPreservedOrchestrationMessage(_byokOriginal, _byokStart);
-    let _byokResult = [..._byokHead, _byokSummaryMessage, ...(_byokOrchestrationMessage ? [_byokOrchestrationMessage] : []), ..._byokOriginal.slice(_byokStart)];
+    let _byokPlanFileMessage = _byokPreservedPlanFileMessage(_byokOriginal, _byokStart);
+    let _byokResult = [..._byokHead, _byokSummaryMessage, ...(_byokPlanFileMessage ? [_byokPlanFileMessage] : []), ...(_byokOrchestrationMessage ? [_byokOrchestrationMessage] : []), ..._byokOriginal.slice(_byokStart)];
     let _byokAfterTokens = _byokHistoryTokenEstimate(_byokResult);
     while (_byokAfterTokens > _byokTargetTokens && _byokStart < _byokTurnFloor.index) {
       let _byokNextStart = _byokStart + 1;
@@ -27603,7 +27839,39 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       _byokOlder = _byokOriginal.slice(_byokHeadEnd, _byokStart);
       _byokSummaryMessage = { role: "system", content: _byokHistorySummary(_byokOlder, _byokSummaryChars) };
       _byokOrchestrationMessage = _byokPreservedOrchestrationMessage(_byokOriginal, _byokStart);
-      _byokResult = [..._byokHead, _byokSummaryMessage, ...(_byokOrchestrationMessage ? [_byokOrchestrationMessage] : []), ..._byokOriginal.slice(_byokStart)];
+      _byokPlanFileMessage = _byokPreservedPlanFileMessage(_byokOriginal, _byokStart);
+      _byokResult = [..._byokHead, _byokSummaryMessage, ...(_byokPlanFileMessage ? [_byokPlanFileMessage] : []), ...(_byokOrchestrationMessage ? [_byokOrchestrationMessage] : []), ..._byokOriginal.slice(_byokStart)];
+      _byokAfterTokens = _byokHistoryTokenEstimate(_byokResult);
+    }
+    // Tool-heavy turns can contain hundreds of completed interactions. The
+    // recent-turn floor is a preference; a hard budget must still win. Keep
+    // the latest user request explicitly when trimming inside that turn.
+    let _byokHardTrimmedMessages = 0;
+    let _byokLatestUserIndex = -1;
+    for (let _byokIndex = _byokOriginal.length - 1; _byokIndex >= _byokHeadEnd; _byokIndex -= 1) {
+      if (_byokIsConversationUserMessage(_byokOriginal[_byokIndex])) {
+        _byokLatestUserIndex = _byokIndex;
+        break;
+      }
+    }
+    let _byokCurrentRequestMessage = null;
+    while (_byokAfterTokens > _byokTargetTokens && _byokStart < _byokOriginal.length - 2) {
+      let _byokNextStart = _byokStart + 1;
+      while (_byokNextStart < _byokOriginal.length - 2 && _byokIsToolResultMessage(_byokOriginal[_byokNextStart])) {
+        _byokNextStart += 1;
+      }
+      if (_byokNextStart >= _byokOriginal.length - 2) break;
+      _byokHardTrimmedMessages += _byokNextStart - _byokStart;
+      _byokStart = _byokNextStart;
+      if (_byokLatestUserIndex >= 0 && _byokLatestUserIndex < _byokStart) {
+        let _byokRequestText = _byokJsonText(_byokOriginal[_byokLatestUserIndex] && _byokOriginal[_byokLatestUserIndex].content).slice(0, 12000);
+        _byokCurrentRequestMessage = { role: "system", content: "Current user request (preserved during local context compaction):\n" + _byokRequestText };
+      }
+      _byokOlder = _byokOriginal.slice(_byokHeadEnd, _byokStart);
+      _byokSummaryMessage = { role: "system", content: _byokHistorySummary(_byokOlder, Math.min(_byokSummaryChars, 16000)) };
+      _byokOrchestrationMessage = _byokPreservedOrchestrationMessage(_byokOriginal, _byokStart);
+      _byokPlanFileMessage = _byokPreservedPlanFileMessage(_byokOriginal, _byokStart);
+      _byokResult = [..._byokHead, _byokSummaryMessage, ...(_byokCurrentRequestMessage ? [_byokCurrentRequestMessage] : []), ...(_byokPlanFileMessage ? [_byokPlanFileMessage] : []), ...(_byokOrchestrationMessage ? [_byokOrchestrationMessage] : []), ..._byokOriginal.slice(_byokStart)];
       _byokAfterTokens = _byokHistoryTokenEstimate(_byokResult);
     }
     return {
@@ -27615,14 +27883,18 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       afterMessages: _byokResult.length,
       summarizedMessages: _byokStart - _byokHeadEnd,
       recentTurns: _byokTurnFloor.turns,
+      preservedPlanFile: !!_byokPlanFileMessage,
       preservedOrchestration: !!_byokOrchestrationMessage,
+      hardBudgetApplied: _byokHardTrimmedMessages > 0,
+      hardTrimmedMessages: _byokHardTrimmedMessages,
+      overTargetTokens: Math.max(0, _byokAfterTokens - _byokTargetTokens),
       thresholdTokens: _byokThresholdTokens,
       targetTokens: _byokTargetTokens,
       reason: "context-fallback"
     };
   }
   function _0x236340(_0x3eb29d, _0x54882f, _0x523c21 = {}) {
-    let _0x352c18 = String(_0x54882f || "BYOK error").slice(0, 500);
+    let _0x352c18 = String(require("./public-errors.cjs").forManaged(_0x54882f || "BYOK error")).slice(0, 500);
     try {
       if (_0x523c21.writer && typeof _0x523c21.writer.abortWithError == "function") {
         return !!_0x523c21.writer.abortWithError(_0x352c18);
@@ -27655,7 +27927,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     try {
       let {
         parseGetChatMessageRequest: _0x4ad8f2
-      } = Zs();
+  } = Zs();
       let _0x25299f = _0x4ad8f2(_0x3654c4, _0x6fad59);
       if (_0x25299f.modelUid) {
         return _0x25299f.modelUid;
@@ -27752,6 +28024,10 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
         return true;
       }
       if (_0x56b1b0.method === "GET") {
+        let _byokActiveRequests = 0;
+        try {
+          _byokActiveRequests = _0x43d77e && typeof _0x43d77e.getSessionMonitor === "function" ? Number(_0x43d77e.getSessionMonitor().activeRequests) || 0 : 0;
+        } catch {}
         _0x1b614b.writeHead(200, {
           "content-type": "application/json",
           "access-control-allow-origin": "*",
@@ -27762,6 +28038,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
           role: "local-probe",
           port: 6778,
           pid: process.pid,
+          activeRequests: _byokActiveRequests,
           daemon: process.env.BYOK_LOCAL_MITM_DAEMON === "1"
         }));
         return true;
@@ -27913,6 +28190,10 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
         try {
           if (enabled) {
             native = _0x3aed9f(2000, { boundUids });
+            if (require("./cloud-managed.cjs").product().enabled) {
+              native.models = (native.models || []).filter(row => boundUids.includes(row.uid));
+              native.modelCount = native.models.length;
+            }
             let boundFamilies = new Set();
             for (let uid of boundUids) {
               try { boundFamilies.add(String((Ns().familyKeyFromUid || (() => ""))(uid) || "")); } catch {}
@@ -28174,6 +28455,34 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
           "cache-control": "no-store"
         });
         _0x1b614b.end(JSON.stringify(_byokPayload));
+        return true;
+      }
+    }
+    if (_0x5a1897 === "/__byok/prompt-identity") {
+      if (_0x56b1b0.method === "OPTIONS") {
+        _0x1b614b.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-methods": "POST,OPTIONS", "access-control-allow-headers": "content-type" });
+        _0x1b614b.end();
+        return true;
+      }
+      if (_0x56b1b0.method === "POST") {
+        let chunks = [], bytes = 0, oversized = false;
+        _0x56b1b0.on("data", chunk => {
+          bytes += chunk.length;
+          if (bytes > 1048576) { oversized = true; chunks = []; }
+          else if (!oversized) chunks.push(chunk);
+        });
+        _0x56b1b0.on("end", () => {
+          let result;
+          try {
+            if (oversized) throw new Error("payload too large");
+            let body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+            result = _byokRegisterPromptIdentity(body && body.sessionId, body && body.prompt);
+          } catch (error) {
+            result = { ok: false, reason: oversized ? "payload-too-large" : "bad-json" };
+          }
+          _0x1b614b.writeHead(result.ok ? 200 : oversized ? 413 : 422, { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": "no-store" });
+          _0x1b614b.end(JSON.stringify(result));
+        });
         return true;
       }
     }
@@ -28480,6 +28789,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       this._directTunnelSockets = new Set();
       this._prewarmLastAt = new Map();
       this._prewarmInFlight = new Map();
+      this._compactorOfficialQueues = new Map();
       this._prewarmSockets = new Set();
       this._prewarmCooldownMs = Math.max(5000, Math.min(300000, Number(process.env.BYOK_LOCAL_PREWARM_COOLDOWN_MS) || 30000));
       this.forceTunnelHosts = new Set(_0x32ceae instanceof Set ? _0x32ceae : Array.isArray(_0x32ceae) ? _0x32ceae.map(_0x5dda31 => String(_0x5dda31).toLowerCase()) : _0x5c790f);
@@ -28880,6 +29190,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       };
       this.sessionMonitorActive.set(_0x43020e, _0x3bdbfd);
       this.sessionMonitorPeak = Math.max(this.sessionMonitorPeak, this.sessionMonitorActive.size);
+      this._writeStatusSnapshot(true);
       return _0x43020e;
     }
     _endSessionMonitor(_0x3da6f2) {
@@ -28901,6 +29212,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       if (this.sessionMonitorRecent.length > 32) {
         this.sessionMonitorRecent.length = 32;
       }
+      this._writeStatusSnapshot(true);
     }
     _pruneSessionMonitor(_byokNow = Date.now(), _byokReserveSlot = false) {
       let _byokCutoff = _byokNow - this.sessionMonitorTtlMs;
@@ -28933,7 +29245,8 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
         peakConcurrentRequests: this.sessionMonitorPeak,
         sessions: _0x20d53a.concat(this.sessionMonitorRecent.slice(0, 16)),
         contextSnapshot: this.contextSnapshot,
-        contextSnapshotCount: this.contextSnapshots.size
+        contextSnapshotCount: this.contextSnapshots.size,
+        calls: require('./provider-stream.cjs').getRecentCalls()
       };
     }
     _emit(_0xe564f5, _0x375f8b) {
@@ -29452,6 +29765,8 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
         _0x31000d = _0x8ca489 ? "mitm+codeium-tunnel" : "mitm";
       }
       return {
+        statusUpdatedAt: Date.now(),
+        activeRequests: this.sessionMonitorActive.size,
         running: !!this.server && this.server.listening,
         mode: _0x31000d,
         mitmEnabled: !!this.mitmEnabled,
@@ -29599,7 +29914,8 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       let _0x55f39e = _0x32d67a;
       let _0x2b8db7 = false;
       try {
-        let _0x2f7fae = _0x560ac1(_0x55f39e, _0x35dce0);
+        let _byokUnlockOpts = _0x20f43f._modelUnlockOpts();
+        let _0x2f7fae = _0x560ac1(_0x55f39e, _0x35dce0, { contextLimits: _byokUnlockOpts && _byokUnlockOpts.contextLimits || {} });
         if (_0x2f7fae.changed && Buffer.isBuffer(_0x2f7fae.body)) {
           _0x55f39e = _0x2f7fae.body;
           _0x2b8db7 = true;
@@ -29727,6 +30043,25 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       }
       this._pushHint(_0x137f26);
     }
+    _queueOfficialCompactorWithFallback(_byokClientResponse, _byokHost, _byokPort, _byokMethod, _byokPath, _byokRequestBody, _byokRequestHeaders, _byokOfficialContext) {
+      let _byokQueueKey = String(_byokOfficialContext && _byokOfficialContext.sessionKey || "").trim();
+      if (!_byokQueueKey) {
+        return this._forwardOfficialCompactorWithFallback(_byokClientResponse, _byokHost, _byokPort, _byokMethod, _byokPath, _byokRequestBody, _byokRequestHeaders, _byokOfficialContext);
+      }
+      let _byokPrevious = this._compactorOfficialQueues.get(_byokQueueKey) || Promise.resolve();
+      if (this._compactorOfficialQueues.has(_byokQueueKey)) {
+        this.onLog("[BYOK-COMPACTOR] queued same-session request session=" + (_byokOfficialContext.sessionHash || "none"));
+      }
+      let _byokRun = _byokPrevious.catch(() => {}).then(() => {
+        if (!_byokClientResponse || _byokClientResponse.writableEnded || _byokClientResponse.destroyed) return;
+        return this._forwardOfficialCompactorWithFallback(_byokClientResponse, _byokHost, _byokPort, _byokMethod, _byokPath, _byokRequestBody, _byokRequestHeaders, _byokOfficialContext);
+      });
+      this._compactorOfficialQueues.set(_byokQueueKey, _byokRun);
+      _byokRun.finally(() => {
+        if (this._compactorOfficialQueues.get(_byokQueueKey) === _byokRun) this._compactorOfficialQueues.delete(_byokQueueKey);
+      }).catch(() => {});
+      return _byokRun;
+    }
     async _forwardOfficialCompactorWithFallback(_byokClientResponse, _byokHost, _byokPort, _byokMethod, _byokPath, _byokRequestBody, _byokRequestHeaders, _byokOfficialContext) {
       let _byokHeaders = { ...(_byokRequestHeaders || {}) };
       delete _byokHeaders["accept-encoding"];
@@ -29741,13 +30076,13 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       let _byokCommitted = false;
       let _byokUpstream = null;
       let _byokObserved = false;
-      let _byokObserve = (_byokStatus, _byokBytes, _byokNormalEnd, _byokReason = "") => {
-        if (_byokObserved) return _byokOfficialCompactorOutcome(_byokStatus, _byokBytes, _byokNormalEnd);
+      let _byokObserve = (_byokStatus, _byokBytes, _byokNormalEnd, _byokReason = "", _byokValidation = null) => {
+        if (_byokObserved) return _byokOfficialCompactorOutcome(_byokStatus, _byokBytes, _byokNormalEnd, _byokValidation);
         _byokObserved = true;
-        let _byokResult = _byokOfficialCompactorOutcome(_byokStatus, _byokBytes, _byokNormalEnd);
+        let _byokResult = _byokOfficialCompactorOutcome(_byokStatus, _byokBytes, _byokNormalEnd, _byokValidation);
         let _byokCounter = _byokResult.outcome === "ok" ? "compactorOfficialResponseOk" : _byokResult.outcome === "fail" ? "compactorOfficialResponseFail" : "compactorOfficialResponseUnknown";
         this.stats[_byokCounter] += 1;
-        this.onLog("[BYOK-COMPACTOR] official response=" + (_byokResult.outcome === "ok" ? "transport-ok" : _byokResult.outcome) + " status=" + (_byokResult.status || "-") + " bytes=" + _byokResult.bytes + " session=" + (_byokOfficialContext && _byokOfficialContext.sessionHash || "none") + " request=" + (_byokOfficialContext && _byokOfficialContext.requestHash || "none") + (_byokReason ? " reason=" + String(_byokReason).replace(/\s+/g, "-").slice(0, 80) : "") + " acceptance=unobserved");
+        this.onLog("[BYOK-COMPACTOR] official response=" + (_byokResult.outcome === "ok" ? "transport-ok" : _byokResult.outcome) + " status=" + (_byokResult.status || "-") + " bytes=" + _byokResult.bytes + " session=" + (_byokOfficialContext && _byokOfficialContext.sessionHash || "none") + " request=" + (_byokOfficialContext && _byokOfficialContext.requestHash || "none") + (_byokValidation ? " validation=" + (_byokValidation.reason || (_byokValidation.valid ? "ok" : "invalid")) : "") + (_byokReason ? " reason=" + String(_byokReason).replace(/\s+/g, "-").slice(0, 80) : "") + " acceptance=transport-validated");
         return _byokResult;
       };
       let _byokClose = () => {
@@ -29816,7 +30151,9 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
           _byokObserve(_byokStatus, _byokBytes, true, "buffer-limit");
           return;
         }
-        let _byokOutcome = _byokObserve(_byokStatus, _byokBytes, true);
+        let _byokBufferedBody = Buffer.concat(_byokChunks);
+        let _byokValidation = _byokValidateOfficialCompactorPayload(_byokStatus, _byokResponseHeaders, _byokBufferedBody);
+        let _byokOutcome = _byokObserve(_byokStatus, _byokBytes, true, "", _byokValidation);
         if (_byokOutcome.outcome === "fail" && !_byokCommitted && !_byokClientResponse.headersSent && !_byokClientResponse.writableEnded) {
           this.stats.compactorOfficialFallbackStarted += 1;
           this.onLog("[BYOK-COMPACTOR] fallback=byok-once trigger=official-http-" + _byokStatus + " session=" + (_byokOfficialContext && _byokOfficialContext.sessionHash || "none"));
@@ -30045,7 +30382,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     }
     _forwardChatUpstream(_0x4cd910, _0x29c9be, _0xb998c6, _0x2eb609, _0x3b00ad, _0x55c988, _0x186130, _byokOfficialContext = null) {
       if (_byokOfficialContext && _byokOfficialContext.compactor && _byokOfficialContext.fallbackEligible) {
-        this._forwardOfficialCompactorWithFallback(_0x4cd910, _0x29c9be, _0xb998c6, _0x2eb609, _0x3b00ad, _0x55c988, _0x186130, _byokOfficialContext);
+        this._queueOfficialCompactorWithFallback(_0x4cd910, _0x29c9be, _0xb998c6, _0x2eb609, _0x3b00ad, _0x55c988, _0x186130, _byokOfficialContext);
         return;
       }
       if (_byokCloudRelayEnabled() && _0x372974(_0x3b00ad)) {
@@ -30255,10 +30592,26 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       let _0x11c7ed = String(_0x3bd1e0.modelUid || "").trim();
       let _byokInternalCompaction = _byokIsCompactionProtocolUid(_0x11c7ed);
       let _byokMetadataSessionKey = _byokProtocolSessionKey(_0x3bd1e0);
+      let _byokManagedTitle = _0x11c7ed === "session-titler" && require("./cloud-managed.cjs").product().enabled;
+      if (_byokManagedTitle) {
+        const owner = _byokResolveRequestSessionIdentity(_0x3bd1e0);
+        const choice = owner.choice || (owner.sessionId ? _byokReadSessionChoice(owner.sessionId) : null);
+        const bindings = require("./cloud-managed.cjs").bindings();
+        if (!choice || choice.official || !bindings?.has(choice.uid)) {
+          // A title has no permission to borrow an unrelated chat's model.
+          // Return a neutral local title instead of sending an internal UID
+          // to the paid gateway and making the error become the chat title.
+          const title = _0x5d8020(_0x4ed892, { modelUid:_0x11c7ed, headers:_0x358c86, emptyFallbackText:"新对话" });
+          title.writeTextDelta("新对话");
+          await title.finish({ modelUid:_0x11c7ed, requestedModelUid:_0x11c7ed, inputTokens:0, emptyFallbackText:"新对话" });
+          _0x25b360.onLog("[BYOK-TITLE] owner=unverified result=local-title");
+          return true;
+        }
+      }
       // Devin's native compactor is authoritative by default. The BYOK path
       // remains available for an explicit operational override, which makes
       // both paths testable without silently replacing native behavior.
-      let _byokCompactorPolicy = String(process.env.BYOK_LOCAL_COMPACTOR_POLICY || "official-first").trim().toLowerCase();
+      let _byokCompactorPolicy = require("./cloud-managed.cjs").product().enabled ? "byok" : String(process.env.BYOK_LOCAL_COMPACTOR_POLICY || "official-first").trim().toLowerCase();
       if (_byokInternalCompaction && _byokCompactorPolicy !== "byok" && !_byokAttempt.officialFailureFallback) {
         _0x25b360.stats.compactorRequests += 1;
         _0x25b360.onLog("[BYOK-COMPACTOR] policy=" + (_byokCompactorPolicy === "official-only" ? "official-only" : "official-first") + " bypass=official reason=native-default");
@@ -30272,6 +30625,9 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
         _0x25b360.stats.compactorRequests += 1;
         let _byokCompactorState = _byokResolveExecutionLoopState(_byokExecutionLoopStates, _0x3bd1e0.messages, { messageIds: _0x3bd1e0.messageIds, sessionKey: _byokMetadataSessionKey }, Date.now());
         _byokExecutionState = { sessionKey: _byokCompactorState.key, state: _byokCompactorState, guard: null, checkpoint: null };
+      } else if (_byokManagedTitle) {
+        // Auxiliary titles must not replace the main conversation's lease or plan state.
+        _byokExecutionState = { sessionKey:_byokMetadataSessionKey, state:{}, guard:null, checkpoint:null };
       } else {
         _byokExecutionState = _byokTrackExecutionLoop(_0x3bd1e0.messages, { messageIds: _0x3bd1e0.messageIds, sessionKey: _byokMetadataSessionKey });
         let _byokDetectedLanguage = _byokDetectConversationLanguage(_0x3bd1e0.messages, _0x3bd1e0.lastUserText);
@@ -30284,9 +30640,47 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       // was resolved (for example: click DeepSeek, request still says GLM).
       // Only the selected-model control endpoint may mutate picker state.
         let _byokRequestSessionId = String(_0x3bd1e0 && _0x3bd1e0.sessionId || "").trim();
-        let _byokMessageSession = _byokRequestSessionId ? { match: "metadata-exact", sessionId: _byokRequestSessionId, candidateSessionIds: [_byokRequestSessionId], candidateCount: 1 } : { match: "message-unverified", sessionId: "", candidateSessionIds: [], candidateCount: 0 };
-        let _byokRawPickerSessionId = _byokRequestSessionId || String(_byokMessageSession && _byokMessageSession.sessionId || "").trim();
+        let _byokMessageSession = _byokResolveRequestSessionIdentity(_0x3bd1e0);
+        if (_byokMessageSession && _byokMessageSession.match === "identity-conflict") {
+          let _byokConflictError = "模型会话绑定冲突：发送会话与请求元数据指向不同会话，请重试发送";
+          _0x25b360.onLog("[BYOK-IDENTITY] conflict=prompt-vs-metadata");
+          _0x25b360._pushHint(_byokConflictError);
+          _0x236340(_0x4ed892, _byokConflictError, { headers: _0x358c86, modelUid: _0x11c7ed || "swe-1-6-slow" });
+          return true;
+        }
+        let _byokMessageResolvedSessionId = _byokMessageSession && /^(?:message|prompt|db-prompt|cascade|tool-lineage)-exact$/.test(_byokMessageSession.match) ? String(_byokMessageSession.sessionId || _byokMessageSession.matchedSessionId || "").trim() : "";
+        let _byokRawPickerSessionId = _byokRequestSessionId || _byokMessageResolvedSessionId;
         let _byokRequestCascadeId = String(_0x3bd1e0 && _0x3bd1e0.cascadeId || "").trim();
+        let _byokCascadeOwner = _byokRequestCascadeId ? _byokReadCascadeChoice(_byokRequestCascadeId) : null;
+        if (_byokMessageSession && _byokMessageSession.match === "prompt-exact" && _byokCascadeOwner && _byokCascadeOwner.sessionId !== _byokRawPickerSessionId) {
+          let _byokConflictError = "模型会话绑定冲突：当前发送会话与请求中的旧 cascadeId 不一致，请重试发送";
+          _0x25b360.onLog("[BYOK-IDENTITY] conflict=prompt-vs-cascade cascade=" + _byokSafeProtocolId(_byokRequestCascadeId));
+          _0x25b360._pushHint(_byokConflictError);
+          _0x236340(_0x4ed892, _byokConflictError, { headers: _0x358c86, modelUid: _0x11c7ed || "swe-1-6-slow" });
+          return true;
+        }
+        if (_byokMessageSession && _byokMessageSession.promptMatch === "prompt-ambiguous" && !_byokRawPickerSessionId) {
+          let _byokAmbiguousError = "模型会话绑定不唯一：多个会话发送了相同内容，请稍后重试";
+          _0x25b360.onLog("[BYOK-IDENTITY] conflict=prompt-ambiguous cascade=" + _byokSafeProtocolId(_byokRequestCascadeId));
+          _0x25b360._pushHint(_byokAmbiguousError);
+          _0x236340(_0x4ed892, _byokAmbiguousError, { headers: _0x358c86, modelUid: _0x11c7ed || "swe-1-6-slow" });
+          return true;
+        }
+        let _byokExactPickerChoice = _byokMessageSession && _byokMessageSession.choice || (_byokRawPickerSessionId ? _byokReadSessionChoice(_byokRawPickerSessionId) : (_byokRequestCascadeId ? _byokCascadeOwner : null));
+        if (_byokRawPickerSessionId && _byokExactPickerChoice && _byokRequestCascadeId && _byokMessageSession && /^(?:metadata|message|prompt|db-prompt|tool-lineage)-exact$/.test(_byokMessageSession.match)) {
+          if (!_byokBindCascadeToSession(_byokExactPickerChoice.sessionId || _byokRawPickerSessionId, _byokRequestCascadeId)) {
+            let _byokConflictError = "模型会话绑定冲突：该 cascadeId 已属于其他会话，请重试发送";
+            _0x25b360.onLog("[BYOK-IDENTITY] conflict=cascade-owner cascade=" + _byokSafeProtocolId(_byokRequestCascadeId));
+            _0x25b360._pushHint(_byokConflictError);
+            _0x236340(_0x4ed892, _byokConflictError, { headers: _0x358c86, modelUid: _0x11c7ed || "swe-1-6-slow" });
+            return true;
+          }
+        }
+        let _byokCascadeClaimed = false;
+        if (!_byokExactPickerChoice && !_byokRawPickerSessionId && _byokRequestCascadeId && _0x4b164d(_0x11c7ed)) {
+          _byokExactPickerChoice = _byokClaimCascadeForRecentExplicitSelection(_byokRequestCascadeId);
+          _byokCascadeClaimed = !!_byokExactPickerChoice;
+        }
         let _0x1511e7 = _0x5152cb({
           requestUid: _0x11c7ed,
           // Picker selections use the raw Devin session id. The metadata:
@@ -30300,10 +30694,10 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
           // Keep model selection lookup on the same raw session key written
           // by the native picker.
           sessionId: _byokRawPickerSessionId,
-          cascadeId: _byokRequestCascadeId
+          cascadeId: _byokRequestCascadeId,
+          choice: _byokExactPickerChoice
         });
-        let _byokExactPickerChoice = _byokRawPickerSessionId ? _byokReadSessionChoice(_byokRawPickerSessionId) : (_byokRequestCascadeId ? _byokReadCascadeChoice(_byokRequestCascadeId) : null);
-        let _byokPickerDiagnosis = _byokRawPickerSessionId ? _byokDiagnoseSessionChoice(_byokRawPickerSessionId) : (_byokRequestCascadeId ? _byokDiagnoseCascadeChoice(_byokRequestCascadeId) : _byokDiagnoseSessionChoice(""));
+        let _byokPickerDiagnosis = _byokCascadeClaimed ? { match: "cascade-claimed", matchedSessionId: String(_byokExactPickerChoice.sessionId || ""), candidateSessionIds: [String(_byokExactPickerChoice.sessionId || "")], candidateCount: 1, choiceKind: "bound", uid: String(_byokExactPickerChoice.uid || "") } : (_byokRawPickerSessionId ? { ..._byokDiagnoseSessionChoice(_byokRawPickerSessionId), match: _byokMessageSession.match } : (_byokRequestCascadeId ? _byokDiagnoseCascadeChoice(_byokRequestCascadeId) : _byokDiagnoseSessionChoice("")));
         // Local requests can omit Metadata.session_id while still carrying the
         // cascade id persisted by the native picker. A cascade choice is only
         // returned for one fresh, unambiguous session, so its concrete session
@@ -30355,13 +30749,43 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
           // available. Returning false is intentional: it avoids fabricating
           // a Local response that can make the native compactor retry forever.
           _0x25b360.onLog("[BYOK-COMPACTOR] bypass=official reason=" + _byokCompactorReason);
+          if (require("./cloud-managed.cjs").product().enabled) {
+            _0x236340(_0x4ed892, "云端服务无法确认压缩请求所属模型，请重新选择模型后重试", { headers:_0x358c86, modelUid:_0x11c7ed });
+            return true;
+          }
           return false;
           }
         }
       }
+      let _byokSubagentSelection = null;
+      let _byokSubagentSignal = __byokSubagentRouting.classifyDefaultRequest(_0x11c7ed, _0x3bd1e0.systemPrompt);
+      if (_byokSubagentSignal && !require("./cloud-managed.cjs").product().enabled) {
+        try {
+          _byokSubagentSelection = __byokSubagentRouting.selectRoute(
+             __byokSubagentRouting.INTERNAL_UID, _0xc498c7, __byokSubagentRouting.readRouting()
+          );
+        } catch (_byokSubagentConfigError) {
+          _byokSubagentSelection = { action: "error", reason: "invalid-config" };
+        }
+        if (_byokSubagentSelection.action === "native") {
+          _0x25b360.onLog("[BYOK-SUBAGENT] route=native reason=default-policy source=" + _byokSubagentSignal);
+          return false;
+        }
+        if (_byokSubagentSelection.action !== "bound") {
+          let _byokSubagentError = "子代理专用模型绑定无效（" + (_byokSubagentSelection.reason || "unknown") + "）— 已拒绝透传官方";
+          _0x25b360.stats.byokFail += 1;
+          _0x25b360.lastByokOk = false;
+          _0x25b360.onLog("[BYOK-SUBAGENT] route=error reason=" + (_byokSubagentSelection.reason || "unknown"));
+          _0x236340(_0x4ed892, _byokSubagentError, { headers: _0x358c86, modelUid: _0x11c7ed });
+          return true;
+        }
+        _0x21155b = _byokSubagentSelection.modelUid;
+         _0x1511e7 = _0x5152cb({ requestUid: _0x21155b, sessionId: _byokRawPickerSessionId, cascadeId: _byokRequestCascadeId });
+         _0x25b360.onLog("[BYOK-SUBAGENT] route=bound model=" + _0x21155b + " source=" + _byokSubagentSignal + " wire=" + _0x11c7ed);
+      }
       let _0x5977b7;
       try {
-        _0x5977b7 = _0xc498c7(_0x21155b);
+        _0x5977b7 = _byokSubagentSelection && _byokSubagentSelection.resolved || _0xc498c7(_0x21155b);
       } catch (_byokResolveError) {
         let _byokLocalEnabled = false;
         try { _byokLocalEnabled = !!_0x2920a8().enabled; } catch {}
@@ -30416,8 +30840,19 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
         return true;
       }
       let _0x56efbf = _0x5977b7.cfg;
+      let _byokAcceptanceState = null;
+      if (!_byokInternalCompaction) {
+        let _byokOwner = _byokExecutionState && _byokExecutionState.state;
+        _byokAcceptanceState = _byokOwner ? (_byokOwner.acceptanceEvidence ||= __byokAcceptance.createState()) : __byokAcceptance.createState();
+        __byokAcceptance.observe(_0x3bd1e0.messages, _byokAcceptanceState);
+      }
       try {
         _0x3bd1e0.messages = _byokMergePendingImages(_0x3bd1e0.messages);
+        let _byokSanitizedHistory = __byokOutputHealth.sanitizeAssistantHistory(_0x3bd1e0.messages);
+        if (_byokSanitizedHistory.removed || _byokSanitizedHistory.reasoningDeduped || _byokSanitizedHistory.protocolStripped || _byokSanitizedHistory.inlineReasoningStripped) {
+          _0x3bd1e0.messages = _byokSanitizedHistory.messages;
+          _0x25b360.onLog("[BYOK-OUTPUT-HEALTH] history sanitized removed=" + _byokSanitizedHistory.removed + " protocolRemoved=" + (_byokSanitizedHistory.protocolRemoved || 0) + " protocolStripped=" + (_byokSanitizedHistory.protocolStripped || 0) + " reasoningDeduped=" + _byokSanitizedHistory.reasoningDeduped + " inlineReasoningStripped=" + (_byokSanitizedHistory.inlineReasoningStripped || 0));
+        }
         _byokCacheSaveFromMessages(_0x3bd1e0.messages);
         let _byokVisionCapabilities = zs().resolveModelCapabilities(_0x56efbf);
         if (_byokVisionCapabilities.vision === false) {
@@ -30430,6 +30865,15 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
           _0x25b360.onLog("[BYOK-VISION] capability=unknown action=passthrough model=" + (_0x56efbf.model || "?"));
         }
       } catch (_0xvisE) {}
+      if (String(process.env.BYOK_LOCAL_IMAGE_PREPROCESS || "on").toLowerCase() !== "off" && _0x4c35e3(_0x3bd1e0.messages) > 0) {
+        try {
+          let _byokImages = await __byokImagePreprocess.optimizeMessages(_0x3bd1e0.messages);
+          if (_byokImages.changed) _0x3bd1e0.messages = _byokImages.messages;
+          _0x25b360.onLog("[BYOK-VISION] preprocess images=" + _byokImages.images + " changed=" + (_byokImages.changed ? 1 : 0) + " codec=" + (__byokImagePreprocess.codecAvailable() ? "sharp" : "unavailable") + " reasons=" + [...new Set(_byokImages.reasons)].join(","));
+        } catch (_byokImageError) {
+          _0x25b360.onLog("[BYOK-VISION] preprocess failed; keeping original images: " + String(_byokImageError && _byokImageError.message || _byokImageError).slice(0, 160));
+        }
+      }
       let _byokContext = _byokResolveModelContextLimit(_0x11c7ed || _0x21155b, _0x56efbf);
       let _byokHistory = _byokCompactLocalHistory(_0x3bd1e0.messages, {
         modelUid: _0x11c7ed,
@@ -30437,10 +30881,13 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
       });
       let _byokTriggerTokens = _byokHistory.thresholdTokens || _byokPositiveInt(process.env.BYOK_LOCAL_HISTORY_TRIGGER_TOKENS, Math.floor(_byokContext.limit * 0.78), 16000, _byokContext.limit);
       let _byokTargetTokens = _byokHistory.targetTokens || _byokPositiveInt(process.env.BYOK_LOCAL_HISTORY_TARGET_TOKENS, Math.floor(_byokContext.limit * 0.58), 12000, _byokTriggerTokens);
-      _0x25b360.onLog("[BYOK-CONTEXT] request-start wire=" + (_0x11c7ed || "(empty)") + " bound=" + (_byokContext.modelUid || _0x21155b || "(empty)") + " context=" + _byokContext.limit + " source=" + _byokContext.source + " historyTokens=" + _byokHistory.beforeTokens + " threshold=" + _byokTriggerTokens + " target=" + _byokTargetTokens + " fallback=" + (_byokHistory.changed ? "used" : _byokHistory.reason));
+      let _byokFallbackMode = _byokHistoryFallbackMode();
+      let _byokThresholdLabel = _byokFallbackMode === "proactive" ? String(_byokTriggerTokens) : _byokFallbackMode === "error-only" ? "upstream-context-error" : "disabled";
+      let _byokTargetLabel = _byokFallbackMode === "proactive" ? String(_byokTargetTokens) : _byokFallbackMode === "error-only" ? "42%-on-error" : "disabled";
+      _0x25b360.onLog("[BYOK-CONTEXT] request-start wire=" + (_0x11c7ed || "(empty)") + " bound=" + (_byokContext.modelUid || _0x21155b || "(empty)") + " context=" + _byokContext.limit + " source=" + _byokContext.source + " historyTokens=" + _byokHistory.beforeTokens + " threshold=" + _byokThresholdLabel + " target=" + _byokTargetLabel + " fallback=" + (_byokHistory.changed ? "used" : _byokHistory.reason));
       if (_byokHistory.changed) {
         _0x3bd1e0.messages = _byokHistory.messages;
-        _0x25b360.onLog("[BYOK-HISTORY] fallback compact wire=" + (_0x11c7ed || "(empty)") + " tokens=" + _byokHistory.beforeTokens + "→" + _byokHistory.afterTokens + " msgs=" + _byokHistory.beforeMessages + "→" + _byokHistory.afterMessages + " summarized=" + _byokHistory.summarizedMessages + " recentTurns=" + (_byokHistory.recentTurns || 0) + " orchestration=" + (_byokHistory.preservedOrchestration ? "preserved" : "suffix-or-none") + " target=" + _byokHistory.targetTokens + " context=" + _byokContext.limit + " source=" + _byokContext.source);
+        _0x25b360.onLog("[BYOK-HISTORY] fallback compact wire=" + (_0x11c7ed || "(empty)") + " tokens=" + _byokHistory.beforeTokens + "→" + _byokHistory.afterTokens + " msgs=" + _byokHistory.beforeMessages + "→" + _byokHistory.afterMessages + " summarized=" + _byokHistory.summarizedMessages + " recentTurns=" + (_byokHistory.recentTurns || 0) + " planFile=" + (_byokHistory.preservedPlanFile ? "preserved" : "none") + " orchestration=" + (_byokHistory.preservedOrchestration ? "preserved" : "suffix-or-none") + " target=" + _byokHistory.targetTokens + " context=" + _byokContext.limit + " source=" + _byokContext.source);
       }
       let _byokInputEstimate = _byokHistoryTokenEstimate(_0x3bd1e0.messages);
       let _byokContextLimit = _byokContext.limit;
@@ -30451,7 +30898,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
           _byokInputEstimate = _byokHistoryTokenEstimate(_0x3bd1e0.messages);
           _0x25b360.onLog("[BYOK-LANGUAGE] session=" + (_byokExecutionState.sessionKey || "stateless") + " response=" + _byokLanguageResult.language);
         }
-        let _byokGuardResult = _byokInjectExecutionLoopGuard(_0x3bd1e0.messages, { guard: _byokExecutionState && _byokExecutionState.guard, checkpoint: _byokExecutionState && _byokExecutionState.checkpoint });
+        let _byokGuardResult = _byokInjectExecutionLoopGuard(_0x3bd1e0.messages, { state: _byokExecutionState && _byokExecutionState.state, executionResult: _byokExecutionState });
         if (_byokGuardResult.guard) {
           _0x3bd1e0.messages = _byokGuardResult.messages;
           _byokInputEstimate = _byokHistoryTokenEstimate(_0x3bd1e0.messages);
@@ -30463,9 +30910,19 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
           }
           if (_byokIsCompletionCheckpoint) {
             _0x25b360.onLog("[BYOK-COMPLETION] session=" + (_byokGuardResult.guard.sessionKey || "stateless") + " status=" + (_byokGuardResult.guard.status || "completed") + " ids=" + (Array.isArray(_byokGuardResult.guard.ids) ? _byokGuardResult.guard.ids.length : 0));
+          } else if (_byokGuardResult.guard.kind === "native-plan-continuity") {
+            _0x25b360.onLog("[BYOK-PLAN-CONTINUITY] session=" + (_byokExecutionState.sessionKey || "stateless") + " pendingSteps=" + _byokGuardResult.guard.pendingSteps + " pendingVerification=" + (_byokGuardResult.guard.pendingVerification ? 1 : 0));
           } else {
             _0x25b360.onLog("[BYOK-EXECUTION-GUARD] session=" + (_byokGuardResult.guard.sessionKey || "stateless") + " phase=" + (_byokGuardResult.guard.phase || "investigate") + " level=" + (_byokGuardResult.guard.level || 1) + " target=" + _byokGuardResult.guard.key + " count=" + _byokGuardResult.guard.count + " investigationTools=" + _byokGuardResult.guard.totalReads + " readOnlyRequests=" + (_byokGuardResult.guard.readOnlyRequests || 0) + (_byokToolPolicy.changed ? " hiddenTools=" + _byokToolPolicy.removed.join(",") : ""));
           }
+        }
+        let _byokAcceptanceHint = String(process.env.BYOK_LOCAL_ACCEPTANCE_GUARD || '').trim().toLowerCase() === 'on' ? __byokAcceptance.continuationHint(_byokAcceptanceState) : '';
+        if (_byokAcceptanceHint) {
+          let _byokHintIndex = 0;
+          while (_byokHintIndex < _0x3bd1e0.messages.length && _0x3bd1e0.messages[_byokHintIndex]?.role === "system") _byokHintIndex += 1;
+          _0x3bd1e0.messages.splice(_byokHintIndex, 0, { role: "system", content: _byokAcceptanceHint });
+          _byokInputEstimate = _byokHistoryTokenEstimate(_0x3bd1e0.messages);
+          _0x25b360.onLog("[BYOK-ACCEPTANCE-CONTINUITY] open=" + _byokAcceptanceState.todos.filter(_byokRow => _byokRow.status !== "completed").length);
         }
       }
       if (!_byokIsCompactionProtocolUid(_0x11c7ed)) {
@@ -30557,6 +31014,81 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
         }
       });
       let _0x1b707b = typeof AbortController !== "undefined" ? new AbortController() : null;
+      let _byokOutputGuard = __byokOutputHealth.createStreamOutputGuard();
+      let _byokProtocolFirewall = __byokOutputHealth.createTextToolProtocolFirewall({
+        allowedTools: _0x3bd1e0.tools,
+        maxCalls: 24,
+        maxBufferedChars: 65536
+      });
+      let _byokReasoningProtocolFirewall = __byokOutputHealth.createTextToolProtocolFirewall({
+        allowedTools: _0x3bd1e0.tools,
+        maxCalls: 24,
+        maxBufferedChars: 65536
+      });
+      let _byokOutputHealthTrip = null;
+      let _byokReasoningDuplicateLogged = false;
+      let _byokReasoningProtocolLogged = false;
+      let _byokNativeToolCallCount = 0;
+      let _byokResponseSafeguard = !_byokInternalCompaction ? __byokAcceptance.createResponseGuard(_byokAcceptanceState, {
+        acceptance: String(process.env.BYOK_LOCAL_ACCEPTANCE_GUARD || '').trim().toLowerCase() === 'on',
+        processSafety: String(process.env.BYOK_LOCAL_PROCESS_GUARD || '').trim().toLowerCase() === 'on',
+        onEvent: _byokEvent => _0x25b360.onLog('[BYOK-SAFEGUARD] kind=' + _byokEvent.kind + ' tool=' + (_byokEvent.name || 'todo') + ' categories=' + (_byokEvent.categories || []).join(','))
+      }) : null;
+      let _byokInlineReasoningSplitter = __byokInlineReasoning.createInlineReasoningSplitter();
+      let _byokInlineReasoningText = "";
+      let _byokTripOutput = _byokTrip => {
+        if (_byokOutputHealthTrip || !_byokTrip) return;
+        _byokOutputHealthTrip = _byokTrip;
+        _0x25b360.onLog("[BYOK-OUTPUT-HEALTH] stream circuit-breaker channel=" + (_byokOutputHealthTrip.channel || "text") + " kind=" + (_byokOutputHealthTrip.kind || "unknown") + " reason=" + (_byokOutputHealthTrip.reason || "detected") + " span=" + (_byokOutputHealthTrip.span || 0));
+        try { if (_0x1b707b) _0x1b707b.abort(); } catch {}
+      };
+      let _byokInspectOutput = (_byokChannel, _byokDelta) => {
+        let _byokHealth = _byokOutputGuard.push(_byokChannel, _byokDelta);
+        if (!_byokOutputHealthTrip && _byokHealth.tripped) {
+          _byokTripOutput(_byokHealth.tripped);
+        }
+        if (_byokHealth.duplicateReasoning && !_byokReasoningDuplicateLogged) {
+          _byokReasoningDuplicateLogged = true;
+          _0x25b360.onLog("[BYOK-OUTPUT-HEALTH] cross-channel duplicate action=suppress-reasoning");
+        }
+        return _byokHealth;
+      };
+      let _byokEmitFilteredText = _byokDelta => {
+        if (!_byokDelta || _byokOutputHealthTrip) return;
+        let _byokHealth = _byokInspectOutput("text", _byokDelta);
+        if (_byokHealth.tripped) return;
+        if (_byokInternalCompaction) {
+          _byokCompactorBufferedText += String(_byokDelta || "");
+        } else {
+          _0x4dca84.writeTextDelta(_byokDelta);
+        }
+      };
+      let _byokEmitFilteredReasoning = _byokDelta => {
+        if (!_byokDelta || _byokOutputHealthTrip) return;
+        _0x31ef02.reasoningChars += String(_byokDelta).length;
+        let _byokProtocol = _byokReasoningProtocolFirewall.push(_byokDelta);
+        if ((_byokProtocol.capturing || _byokProtocol.tripped) && !_byokReasoningProtocolLogged) {
+          _byokReasoningProtocolLogged = true;
+          _0x25b360.onLog("[BYOK-OUTPUT-HEALTH] reasoning tool protocol action=isolate protocol=xml-invoke");
+        }
+        if (!_byokProtocol.emit) return;
+        let _byokHealth = _byokInspectOutput("reasoning", _byokProtocol.emit);
+        if (_byokHealth.tripped || _byokHealth.suppress) return;
+        _0x4dca84.writeReasoningDelta(_byokProtocol.emit);
+      };
+      let _byokProcessVisibleText = _byokDelta => {
+        if (!_byokDelta || _byokOutputHealthTrip) return;
+        let _byokProtocol = _byokProtocolFirewall.push(_byokDelta);
+        if (_byokProtocol.tripped) {
+          _byokTripOutput({ channel: "text", ..._byokProtocol.tripped });
+          return;
+        }
+        if (_byokProtocol.capturing && _byokNativeToolCallCount) {
+          _byokTripOutput({ channel: "text", kind: "text-tool-protocol", reason: "mixed-native-and-text-tools", protocol: "xml-invoke" });
+          return;
+        }
+        _byokEmitFilteredText(_byokProtocol.emit);
+      };
       let _0x2b87d8 = () => {
         try {
           if (_0x1b707b) {
@@ -30574,6 +31106,8 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
         let _0xbyokRetryN = 0;
         let _0xbyokMsgs = _0x3bd1e0.messages;
         while (true) {
+        _byokInlineReasoningSplitter = __byokInlineReasoning.createInlineReasoningSplitter();
+        _byokInlineReasoningText = "";
         _0xc74513 = await _0x2bca43({
           messages: _0xbyokMsgs,
           tools: _0x3bd1e0.tools,
@@ -30583,6 +31117,10 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
           compaction: _byokInternalCompaction,
           internalRequestUid: _0x11c7ed,
           signal: _0x1b707b ? _0x1b707b.signal : null,
+          requestId: _0x3bd1e0.promptId || _0x3bd1e0.executionId || _0x3bd1e0.messageIds?.at(-1) || '',
+          sessionId: _byokExecutionState && _byokExecutionState.sessionKey || '',
+          attempt: _0xbyokRetryN + 1,
+          onCallRecord: record => _0x25b360.onLog('[BYOK-CALL] ' + JSON.stringify(record)),
           onPrepDone: (_byokPrep = {}) => {
             let _byokPreparedAt = Number(_byokPrep.startedAtMs);
             if (Number.isFinite(_byokPreparedAt) && _byokPreparedAt > 0) _byokUpstreamStartedAt = _byokPreparedAt;
@@ -30606,16 +31144,14 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
           },
           onTextDelta: _0x2ce034 => {
             _byokMarkFirstDelta();
-            if (_byokInternalCompaction) {
-              _byokCompactorBufferedText += String(_0x2ce034 || "");
-            } else {
-              _0x4dca84.writeTextDelta(_0x2ce034);
-            }
+            let _byokSplit = _byokInlineReasoningSplitter.push(_0x2ce034);
+            _byokInlineReasoningText += _byokSplit.reasoning;
+            _byokEmitFilteredReasoning(_byokSplit.reasoning);
+            _byokProcessVisibleText(_byokSplit.text);
           },
           onReasoningDelta: _0x2c3d71 => {
             _byokMarkFirstDelta();
-            _0x31ef02.reasoningChars += String(_0x2c3d71 || "").length;
-            _0x4dca84.writeReasoningDelta(_0x2c3d71);
+            _byokEmitFilteredReasoning(_0x2c3d71);
           },
           onSignatureDelta: _0x6d4a2f => {
             _0x31ef02.signatureChars += String(_0x6d4a2f || "").length;
@@ -30623,7 +31159,14 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
           },
           onToolCallReady: _0x593449 => {
             _byokMarkFirstDelta();
-            _0x4dca84.writeToolCalls([_0x593449]);
+            _byokNativeToolCallCount += 1;
+            if (_byokProtocolFirewall.snapshot().capturing) {
+              _byokTripOutput({ channel: "text", kind: "text-tool-protocol", reason: "mixed-native-and-text-tools", protocol: "xml-invoke" });
+              return;
+            }
+            if (_byokResponseSafeguard && _byokResponseSafeguard.shouldDefer(_0x593449)) return;
+            let _byokSafeCall = _byokResponseSafeguard ? _byokResponseSafeguard.filter(_0x593449) : _0x593449;
+            if (_byokSafeCall) _0x4dca84.writeToolCalls([_byokSafeCall]);
           }
         });
         _0xbyokRetryN += 1;
@@ -30640,6 +31183,28 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
             _0x31ef02.images = _0x29cda8;
             _0x25b360.onLog("[BYOK] vision 400 persisted — retry without images");
             try { await new Promise(_0xbyokR => setTimeout(_0xbyokR, 400)); } catch {}
+            continue;
+          }
+        }
+        if (!_byokInternalCompaction
+          && _0xbyokRetryN === 1
+          && _byokHistoryFallbackMode() === "error-only"
+          && _byokIsContextLimitFailure(_0xc74513)
+          && _0x31ef02.firstDeltaMs == null
+          && !_byokNativeToolCallCount
+          && !(Array.isArray(_0xc74513 && _0xc74513.toolCalls) && _0xc74513.toolCalls.length)) {
+          let _byokEmergencyHistory = _byokCompactLocalHistory(_0xbyokMsgs, {
+            modelUid: _0x11c7ed,
+            contextTokens: _byokContextLimit,
+            thresholdTokens: 16000,
+            targetTokens: Math.max(12000, Math.floor(_byokContextLimit * 0.42)),
+            enabled: true
+          });
+          if (_byokEmergencyHistory.changed && _byokEmergencyHistory.afterTokens < _byokEmergencyHistory.beforeTokens) {
+            _0xbyokMsgs = _byokEmergencyHistory.messages;
+            _0x3bd1e0.messages = _0xbyokMsgs;
+            _byokInputEstimate = _byokEmergencyHistory.afterTokens;
+            _0x25b360.onLog("[BYOK-HISTORY] emergency context-limit retry once tokens=" + _byokEmergencyHistory.beforeTokens + "→" + _byokEmergencyHistory.afterTokens + " msgs=" + _byokEmergencyHistory.beforeMessages + "→" + _byokEmergencyHistory.afterMessages + " summarized=" + _byokEmergencyHistory.summarizedMessages + " planFile=" + (_byokEmergencyHistory.preservedPlanFile ? "preserved" : "none") + " orchestration=" + (_byokEmergencyHistory.preservedOrchestration ? "preserved" : "suffix-or-none"));
             continue;
           }
         }
@@ -30663,9 +31228,70 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
           _0x4ed892.removeListener("aborted", _0x2b87d8);
         } catch {}
       }
+      if (!_byokOutputHealthTrip && !_0x1b707b?.signal.aborted && !_0x4ed892.destroyed) {
+        let _byokInlineFinal = _byokInlineReasoningSplitter.push("", true);
+        _byokInlineReasoningText += _byokInlineFinal.reasoning;
+        _byokEmitFilteredReasoning(_byokInlineFinal.reasoning);
+        _byokProcessVisibleText(_byokInlineFinal.text);
+        let _byokReasoningProtocolFinal = _byokReasoningProtocolFirewall.finalize();
+        if (_byokReasoningProtocolFinal.emit) {
+          let _byokReasoningHealth = _byokInspectOutput("reasoning", _byokReasoningProtocolFinal.emit);
+          if (!_byokReasoningHealth.tripped && !_byokReasoningHealth.suppress) _0x4dca84.writeReasoningDelta(_byokReasoningProtocolFinal.emit);
+        }
+        if (_0xc74513 && (_byokReasoningProtocolFinal.captured || _byokReasoningProtocolFinal.tripped)) {
+          _0xc74513.reasoning = _byokReasoningProtocolFirewall.visibleText();
+        }
+        let _byokProtocolFinal = _byokProtocolFirewall.finalize();
+        if (_byokProtocolFinal.tripped) {
+          _byokTripOutput({ channel: "text", ..._byokProtocolFinal.tripped });
+        } else {
+          _byokEmitFilteredText(_byokProtocolFinal.emit);
+          if (_byokProtocolFinal.calls.length) {
+            let _byokNativeCalls = Array.isArray(_0xc74513 && _0xc74513.toolCalls) ? _0xc74513.toolCalls : [];
+            if (!_0xc74513 || !_0xc74513.ok || _0xc74513.finishReason === "length") {
+              _byokTripOutput({ channel: "text", kind: "text-tool-protocol", reason: "incomplete-upstream-response", protocol: "xml-invoke" });
+            } else if (_byokNativeCalls.length || _byokNativeToolCallCount) {
+              _byokTripOutput({ channel: "text", kind: "text-tool-protocol", reason: "mixed-native-and-text-tools", protocol: "xml-invoke" });
+            } else {
+              _0xc74513.toolCalls = _byokProtocolFinal.calls;
+              _0xc74513.finishReason = "tool_calls";
+              _0xc74513.text = _byokProtocolFirewall.visibleText();
+              for (let _byokRecoveredCall of _byokProtocolFinal.calls) {
+                if (_byokResponseSafeguard && _byokResponseSafeguard.shouldDefer(_byokRecoveredCall)) continue;
+                let _byokSafeRecoveredCall = _byokResponseSafeguard ? _byokResponseSafeguard.filter(_byokRecoveredCall) : _byokRecoveredCall;
+                if (_byokSafeRecoveredCall) _0x4dca84.writeToolCalls([_byokSafeRecoveredCall]);
+              }
+              _0x25b360.onLog("[BYOK-OUTPUT-HEALTH] text tool protocol recovered protocol=xml-invoke calls=" + _byokProtocolFinal.calls.length);
+            }
+          }
+        }
+        if (_byokInlineFinal.matched && _0xc74513) {
+          _0xc74513.text = _byokProtocolFirewall.visibleText();
+          _0xc74513.reasoning = String(_0xc74513.reasoning || "") + _byokInlineReasoningText;
+        }
+      }
       _0x31ef02.streamed = !!_0xc74513.streamed;
       if (_0x31ef02.status == null && _0xc74513.status != null) {
         _0x31ef02.status = _0xc74513.status;
+      }
+      if (_byokOutputHealthTrip) {
+        _0x25b360.stats.byokFail += 1;
+        _0x25b360.lastByokOk = false;
+        _0x25b360.lastByokMode = null;
+        let _byokHealthMessage = _byokOutputHealthTrip.kind === "text-tool-protocol" ? "检测到上游将工具调用作为异常文本输出，已安全停止本次生成；未执行不完整或不可信的调用，请重试。" : "检测到上游输出发生异常重复，已自动停止本次生成；异常内容不会带入后续上下文，请重试。";
+        _0x25b360._pushHint(_byokHealthMessage);
+        _0x306f3f({
+          ok: false,
+          mode: "output-health",
+          error: _byokHealthMessage,
+          modelUid: _0x1511e7.uid || _0x21155b || _0x11c7ed,
+          match: _0x5977b7.match || null,
+          status: _0xc74513 && _0xc74513.status || 0,
+          ms: _0xc74513 && _0xc74513.ms || 0
+        });
+        _0x236340(_0x4ed892, _byokHealthMessage, { writer: _0x4dca84 });
+        _0x29fb4a({ reason: "output-health-circuit-breaker" });
+        return true;
       }
       if (!_0xc74513.ok) {
         _0x25b360.stats.byokFail += 1;
@@ -30700,6 +31326,16 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
         return true;
       }
       let _0x62095f = Array.isArray(_0xc74513.toolCalls) ? _0xc74513.toolCalls : [];
+      if (_byokResponseSafeguard) {
+        _0x62095f = _byokResponseSafeguard.finish(_0x62095f);
+        _0xc74513.toolCalls = _0x62095f;
+        if (!_0x62095f.length && _0xc74513.finishReason === 'tool_calls') _0xc74513.finishReason = 'stop';
+        let _byokSafeguardNotice = _byokResponseSafeguard.notice(!_0x62095f.length);
+        if (_byokSafeguardNotice) {
+          _0x4dca84.writeTextDelta(_byokSafeguardNotice);
+          _0xc74513.text = String(_0xc74513.text || '') + _byokSafeguardNotice;
+        }
+      }
       if (_byokInternalCompaction) {
         _0x25b360.stats.compactorByokOk += 1;
         let _byokCompactorRawText = String(_0xc74513.text || _byokCompactorBufferedText || "");
@@ -30826,19 +31462,32 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     }
     _handleChatMitm(_0x2c81ab, _0x42fa58, _0x4daaec, _0x35663b, _0x5a8e54, _0x471857) {
       let _0x2acc0e = this;
-      let _0x3f5c83 = 2097152;
+      // A GetChatMessage request includes the complete conversation and image
+      // bytes. Never parse or forward a prefix as if it were a whole protobuf.
+      let _0x3f5c83 = Math.max(8, Math.min(128, Number(process.env.BYOK_LOCAL_CHAT_BODY_MAX_MB) || 64)) * 1048576;
       let _0x420adf = [];
       let _0x4ef61c = 0;
+      let _byokBodyTooLarge = false;
       _0x2c81ab.on("data", _0x52ee8b => {
-        if (_0x4ef61c < _0x3f5c83) {
-          let _0x1d4dac = _0x3f5c83 - _0x4ef61c;
-          _0x420adf.push(_0x1d4dac >= _0x52ee8b.length ? _0x52ee8b : _0x52ee8b.subarray(0, _0x1d4dac));
-          _0x4ef61c += Math.min(_0x1d4dac, _0x52ee8b.length);
-        } else {
-          _0x4ef61c += _0x52ee8b.length;
+        _0x4ef61c += _0x52ee8b.length;
+        if (_byokBodyTooLarge) return;
+        if (_0x4ef61c > _0x3f5c83) {
+          _byokBodyTooLarge = true;
+          _0x420adf = [];
+          return;
         }
+        _0x420adf.push(_0x52ee8b);
       });
       _0x2c81ab.on("end", () => {
+        if (_byokBodyTooLarge) {
+          _0x2acc0e.stats.errors += 1;
+          _0x2acc0e.onLog("[BYOK] GetChatMessage body exceeds configured cap: seen=" + _0x4ef61c + " limit=" + _0x3f5c83);
+          if (!_0x42fa58.writableEnded) {
+            _0x42fa58.writeHead(413, { "content-type": "application/json; charset=utf-8" });
+            _0x42fa58.end(JSON.stringify({ error: "GetChatMessage request body exceeds local bridge limit", bytes: _0x4ef61c, maxBytes: _0x3f5c83 }));
+          }
+          return;
+        }
         let _0x3f7de3 = Buffer.concat(_0x420adf);
         let _byokOfficialContext = null;
         let _0x3761ef = _0xac07ca(_0x2c81ab.headers, _0x4189d0);
@@ -30850,13 +31499,19 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
             let _0x1605ff = String(_0x25273d && _0x25273d.modelUid || "").trim();
             if (_byokIsCompactionProtocolUid(_0x1605ff)) {
               let _byokConfiguredCompactorPolicy = String(process.env.BYOK_LOCAL_COMPACTOR_POLICY || "official-first").trim().toLowerCase();
+              let _byokCompactorLineage = _byokProtocolSessionKey(_0x25273d);
               _byokOfficialContext = {
                 compactor: true,
                 fallbackEligible: _byokConfiguredCompactorPolicy !== "byok" && _byokConfiguredCompactorPolicy !== "official-only",
-                sessionHash: _byokSafeProtocolId(_0x25273d && _0x25273d.sessionId),
+                sessionKey: _byokCompactorLineage,
+                sessionHash: _byokSafeProtocolId(_byokCompactorLineage),
                 requestHash: _byokSafeProtocolId(_0x25273d && _0x25273d.requestId)
               };
             }
+            // A native default subagent must reach its dedicated route with
+            // its original UID and system identity intact. A parent picker
+            // selection must not rewrite the child before that route runs.
+            if (!__byokSubagentRouting.classifyDefaultRequest(_0x1605ff, _0x25273d && _0x25273d.systemPrompt)) {
             // Do not turn a request's wire UID into an explicit selection.
             // This pass-through path sees the same lagging sessions.db value
             // as the Local route and must preserve the user's latest click.
@@ -30881,6 +31536,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
             } else if (_0x463170.skipped && _0x2acc0e._logGate.changed("entry-rewrite", "skip:" + _0x1605ff + ":" + _0x232992 + ":" + (_0x463170.reason || "?"))) {
               _0x2acc0e.onLog("[BYOK] entryRewrite skipped wire=" + (_0x1605ff || "(empty)") + " entry=" + (_0x232992 || "(empty)") + " reason=" + (_0x463170.reason || "?") + " — 保持原 wire（注入/内部 uid 不可发往官方）");
             }
+            }
           } catch (_0x5ee8cc) {
             _0x2acc0e.onLog("[BYOK] entryRewrite skip " + (_0x5ee8cc && _0x5ee8cc.message ? _0x5ee8cc.message : _0x5ee8cc));
           }
@@ -30902,9 +31558,6 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
         if (_0x2acc0e.policy.shouldLogWireDetail(_0x4daaec, _0x471857)) {
           let _0x558e2d = _0x5b9a35.kind === "text" ? "body=" + _0x5b9a35.bytes + "b text=\"" + String(_0x5b9a35.preview || "").replace(/\s+/g, " ").slice(0, 120) + "\"" : "body=" + _0x5b9a35.bytes + "b bin head=" + (_0x5b9a35.headHex || "");
           _0x2acc0e.onLog("[MITM] " + _0x5a8e54 + " https://" + _0x4daaec + _0x471857 + " hdr=" + JSON.stringify(_0x3761ef) + " " + _0x558e2d);
-          if (_0x4ef61c > _0x3f5c83) {
-            _0x2acc0e.onLog("[MITM] body truncated for forward cap " + _0x3f5c83 + " (seen=" + _0x4ef61c + ")");
-          }
         } else if (!_0x29fce7) {
           let _0x39c7be = _0x2acc0e.policy.allow("mitm", _0x4daaec, _0x471857);
           _0x2acc0e._emit(_0x39c7be, "[MITM] " + _0x5a8e54 + " https://" + _0x4daaec + _0x471857);
@@ -31236,6 +31889,7 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
         }
         this._prewarmInFlight.clear();
         this._prewarmLastAt.clear();
+        this._compactorOfficialQueues.clear();
         for (let _byokSocket of this._directTunnelSockets) {
           try { _byokSocket.destroy(); } catch {}
         }
@@ -31327,10 +31981,13 @@ var ud = Q((_0x3a7c0c, _0xf23277) => {
     resolveCompactorSessionRoute: _byokResolveCompactorSessionRoute,
     protocolSessionKey: _byokProtocolSessionKey,
     officialCompactorOutcome: _byokOfficialCompactorOutcome,
+    validateOfficialCompactorPayload: _byokValidateOfficialCompactorPayload,
     responseModelUid: _byokResponseModelUid,
     resolveModelContextLimit: _byokResolveModelContextLimit,
     normalizeTransportUsage: _byokNormalizeTransportUsage,
     resolveByokForModelUid: _0xc498c7,
+    historyFallbackMode: _byokHistoryFallbackMode,
+    isContextLimitFailure: _byokIsContextLimitFailure,
     compactLocalHistory: _byokCompactLocalHistory,
     estimateLocalHistoryTokens: _byokHistoryTokenEstimate,
     compactorEvidenceText: _byokCompactorEvidenceText,
@@ -31400,10 +32057,15 @@ async function G1() {
     statusPath: $1,
     onLog: _0xbc1639 => {}
   });
+  let _byokStatusHeartbeat = setInterval(() => {
+    try { _0xf65152._writeStatusSnapshot(true); } catch {}
+  }, Math.max(2000, Number(process.env.BYOK_LOCAL_STATUS_HEARTBEAT_MS) || 5000));
+  if (_byokStatusHeartbeat && _byokStatusHeartbeat.unref) _byokStatusHeartbeat.unref();
   let _0xshutdownStarted = false;
   let _0x1574da = async (_0x37cf7d, _0xexitCode = 0) => {
     if (_0xshutdownStarted) return;
     _0xshutdownStarted = true;
+    try { clearInterval(_byokStatusHeartbeat); } catch {}
     fn("[daemon] shutdown " + (_0x37cf7d || "exit"));
     try {
       await _0xf65152.stop({

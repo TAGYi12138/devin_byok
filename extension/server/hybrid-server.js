@@ -1,3 +1,4 @@
+import _byokPublicErrors from "./public-errors.cjs";
 var bc = Object.create;
 var Xr = Object.defineProperty;
 var Rc = Object.getOwnPropertyDescriptor;
@@ -263,6 +264,8 @@ var Wi = qr((_0x35587f, _0x569e60) => {
   };
 });
 import _0x2e06de from "node:http";
+import inlineReasoning from "./inline-reasoning.cjs";
+import providerStreams from "./provider-stream.cjs";
 import _0x163c7a from "node:https";
 import _0x262233 from "node:net";
 import _0x57ad80 from "node:tls";
@@ -3303,7 +3306,9 @@ var qs = /([\/\\][\w.\-]+\.[a-zA-Z0-9]{1,6}\b|\berror\b|\bfail(ed)?\b|\bexceptio
 var Gn = new Map();
 var jn = new Map();
 function eu() {
-  let _0x448ce1 = String(process.env.BYOK_HISTORY_COMPRESS ?? "1").trim().toLowerCase();
+  // Preserve Devin's native history by default. Legacy proxy-side compression
+  // remains available as an explicit compatibility opt-in.
+  let _0x448ce1 = String(process.env.BYOK_HISTORY_COMPRESS ?? "0").trim().toLowerCase();
   return _0x448ce1 !== "0" && _0x448ce1 !== "false" && _0x448ce1 !== "off" && _0x448ce1 !== "no";
 }
 function Do() {
@@ -3963,6 +3968,21 @@ async function gu(_0x124b30, _0x294f0b, _0xf45033 = {}) {
       summaryMode: "none"
     };
   }
+  if (!_0x5d1dbd) {
+    return {
+      entries: _0x3d85d2,
+      cacheEntries: _0x3d2813,
+      tokens: _0x1a4939,
+      toolCompacted: 0,
+      summarized: 0,
+      dropped: 0,
+      threshold: _0x512896,
+      target: _0xbf7b5e,
+      stages: [],
+      reason: _0x1a4939 > _0x2fe19a ? "native-fidelity-over-limit" : "native-fidelity",
+      summaryMode: "none"
+    };
+  }
   if (_0x5d1dbd) {
     let _0x25ed82 = si(_0x3d85d2, _0x33b766, _0x5a7b9b);
     let _0xfdee43 = Math.max(0, _0x3d85d2.length - _0x25ed82);
@@ -3984,7 +4004,7 @@ async function gu(_0x124b30, _0x294f0b, _0xf45033 = {}) {
       _0x56144d.push("tool");
     }
   }
-  if (!_0x5d1dbd || _0x1a4939 <= _0x512896) {
+  if (_0x1a4939 <= _0x512896) {
     if (_0x1a4939 > _0x2fe19a) {
       let _0x55b065 = Yn(_0x3d85d2, _0x2fe19a);
       _0x17e9f1 = _0x55b065.dropped;
@@ -4536,7 +4556,7 @@ function di(_0x5a0b60, _0x3bcc70) {
 import _0xc52bb7 from "node:crypto";
 import _0x474a4c from "node:zlib";
 var Yo = 160;
-var fi = "Devin BYOK Bridge";
+var fi = "Devin Model Gateway";
 var Go = "[" + fi + "]";
 var pi = "[XY Devin Byok]";
 function Su(_0x3ef360) {
@@ -4839,6 +4859,7 @@ function xu(_0x4a3bf9) {
   }
 }
 function gn(_0x347dc3, _0x2aab04) {
+  _0x2aab04 = _byokPublicErrors.forManaged(_0x2aab04);
   let _0x3685de = yu(Zo(_0x2aab04));
   if (_0x3685de.length <= Yo) {
     return [di(_0x347dc3, _0x3685de)];
@@ -4951,7 +4972,6 @@ function gi(_0x559d1a) {
       return;
     }
     if (!ku(_0x5d308b.remoteAddress)) {
-      console.warn("[WS Bridge] Rejected non-loopback client (" + (_0x5d308b.remoteAddress || "unknown") + ")");
       _0x5d308b.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
       return;
     }
@@ -5433,36 +5453,8 @@ function Mi(_0x8b8e09) {
   }
   return 0;
 }
-function bi(_0xe9c91d) {
-  let _0x442276 = [];
-  let _0x7874d3 = _0xe9c91d.split("\n");
-  let _0x39db51 = null;
-  let _0xa9c15e = [];
-  for (let _0x1a7063 of _0x7874d3) {
-    if (_0x1a7063.startsWith("event: ")) {
-      _0x39db51 = _0x1a7063.slice(7).trim();
-    } else if (_0x1a7063.startsWith("data: ")) {
-      _0xa9c15e.push(_0x1a7063.slice(6));
-    } else if (_0x1a7063.startsWith("data:")) {
-      _0xa9c15e.push(_0x1a7063.slice(5));
-    } else if (_0x1a7063 === "" && _0x39db51 !== null) {
-      let _0x434d42 = _0xa9c15e.join("\n");
-      try {
-        _0x442276.push({
-          event: _0x39db51,
-          data: JSON.parse(_0x434d42)
-        });
-      } catch {
-        _0x442276.push({
-          event: _0x39db51,
-          data: _0x434d42
-        });
-      }
-      _0x39db51 = null;
-      _0xa9c15e = [];
-    }
-  }
-  return _0x442276;
+function bi(input) {
+  return providerStreams.parseSseBuffer(input, { flush: true }).events;
 }
 var no = class {
   constructor(_0x511320, _0x51ce74, _0x487a31 = null, _0x2c29ef = true) {
@@ -5825,48 +5817,8 @@ function Uu(_0x75b839) {
   }
   return 0;
 }
-function Ri(_0x1bf562) {
-  let _0x13c0a4 = [];
-  let _0x4d5f36 = _0x1bf562.split("\n");
-  for (let _0x195a2 of _0x4d5f36) {
-    if (!_0x195a2.startsWith("data: ")) {
-      continue;
-    }
-    let _0x12bb21 = _0x195a2.slice(6).trim();
-    if (_0x12bb21 === "[DONE]") {
-      _0x13c0a4.push({
-        done: true,
-        type: "done",
-        data: null
-      });
-      continue;
-    }
-    try {
-      let _0x44109a = JSON.parse(_0x12bb21);
-      if (_0x44109a.error) {
-        _0x13c0a4.push({
-          done: false,
-          type: "chat.completions.error",
-          data: _0x44109a
-        });
-        continue;
-      }
-      if (Array.isArray(_0x44109a.choices)) {
-        _0x13c0a4.push({
-          done: false,
-          type: "chat.completions.chunk",
-          data: _0x44109a
-        });
-        continue;
-      }
-      _0x13c0a4.push({
-        done: false,
-        type: _0x44109a.type || "",
-        data: _0x44109a
-      });
-    } catch {}
-  }
-  return _0x13c0a4;
+function Ri(input) {
+  return providerStreams.parseSseBuffer(input, { flush: true }).events;
 }
 var ro = class {
   constructor(_0x7a3d1a, _0xcc477, _0x486b51 = null, _0x165bdb = true) {
@@ -5881,7 +5833,7 @@ var ro = class {
     this._itemTypes = {};
     this._itemPhases = {};
     this._pendingText = "";
-    this._thinkPlaceholderBuffer = "";
+    this._inlineReasoning = inlineReasoning.createInlineReasoningSplitter();
     this._reasoningPlaceholderBuffer = "";
     this._reasoningStreamStarted = false;
     this._reasoningBuffer = "";
@@ -6085,11 +6037,10 @@ var ro = class {
     }
     let _0x5778d0 = [];
     let _0x497b65 = [];
-    this._flushReasoningPlaceholder(_0x5778d0);
     let _0x3b59f7 = this._filterThinkPlaceholderText("", true);
-    if (_0x3b59f7) {
-      this._handleOutputTextDelta(_0x3b59f7, _0x5778d0, true);
-    }
+    if (_0x3b59f7.reasoning) this._handleReasoningDelta(_0x3b59f7.reasoning, _0x5778d0);
+    if (_0x3b59f7.text) this._handleOutputTextDelta(_0x3b59f7.text, _0x5778d0, true);
+    this._flushReasoningPlaceholder(_0x5778d0);
     if (this._errorMessage) {
       this._restoreInterceptedText(_0x5778d0);
       for (let _0x3dcb72 of gn(this._messageId, this._errorMessage)) {
@@ -6145,9 +6096,8 @@ var ro = class {
     }
     this._stopReason ||= "stop";
     if (this._tokenCount === 0 && _0x497b65.length === 0 && this._reasoningBuffer) {
-      S(_.DETAIL, "仅 reasoning，提升为可见文本");
-      this._emitTextChunk(this._reasoningBuffer, _0x5778d0);
-      this._reasoningBuffer = "";
+      S(_.DETAIL, "仅 reasoning，无可见正文");
+      this._emitTextChunk("模型仅返回了推理内容，请重试。", _0x5778d0);
     }
     if (this._stopReason === "tool_calls" && _0x497b65.length === 0) {
       S(_.TOOL, "stop=tool_calls 但未解析到调用，降级为 stop");
@@ -6229,58 +6179,13 @@ var ro = class {
       this._emitReasoningChunk(_0x4bc3e2, _0x1c88dd);
     }
   }
-  _filterThinkPlaceholderText(_0x5696d4, _0x5c2a2f = false) {
-    let _0x2f5bcf = "" + this._thinkPlaceholderBuffer + String(_0x5696d4 || "");
-    this._thinkPlaceholderBuffer = "";
-    let _0x38ed36 = "";
-    let _0x16da3d = "<think>";
-    let _0x1cf6ca = "</think>";
-    while (_0x2f5bcf) {
-      let _0x10c3bb = _0x2f5bcf.toLowerCase();
-      let _0x185389 = _0x10c3bb.indexOf(_0x16da3d);
-      if (_0x185389 === -1) {
-        if (_0x5c2a2f) {
-          _0x38ed36 += _0x2f5bcf;
-          break;
-        }
-        let _0x24dba4 = 0;
-        let _0x36f158 = Math.min(_0x2f5bcf.length, _0x16da3d.length - 1);
-        for (let _0x1545af = _0x36f158; _0x1545af > 0; _0x1545af--) {
-          if (_0x16da3d.startsWith(_0x10c3bb.slice(-_0x1545af))) {
-            _0x24dba4 = _0x1545af;
-            break;
-          }
-        }
-        _0x38ed36 += _0x2f5bcf.slice(0, _0x2f5bcf.length - _0x24dba4);
-        this._thinkPlaceholderBuffer = _0x2f5bcf.slice(_0x2f5bcf.length - _0x24dba4);
-        break;
-      }
-      _0x38ed36 += _0x2f5bcf.slice(0, _0x185389);
-      _0x2f5bcf = _0x2f5bcf.slice(_0x185389);
-      let _0x3ed73c = _0x2f5bcf.toLowerCase().indexOf(_0x1cf6ca, _0x16da3d.length);
-      if (_0x3ed73c !== -1) {
-        let _0x23d53f = _0x3ed73c + _0x1cf6ca.length;
-        let _0x5774bf = _0x2f5bcf.slice(_0x16da3d.length, _0x3ed73c);
-        if (!/^\s*(?:\.{3,}|…+)\s*$/.test(_0x5774bf)) {
-          _0x38ed36 += _0x2f5bcf.slice(0, _0x23d53f);
-        }
-        _0x2f5bcf = _0x2f5bcf.slice(_0x23d53f);
-        continue;
-      }
-      let _0x4ab8fb = _0x2f5bcf.slice(_0x16da3d.length).match(/^([\s.…]*)(.*)$/s);
-      let _0xa23c13 = _0x4ab8fb?.[2] || "";
-      let _0x57cd1d = !!_0x4ab8fb && (!_0xa23c13 || _0x1cf6ca.startsWith(_0xa23c13.toLowerCase()));
-      if (!_0x5c2a2f && _0x57cd1d) {
-        this._thinkPlaceholderBuffer = _0x2f5bcf;
-      } else {
-        _0x38ed36 += _0x2f5bcf;
-      }
-      break;
-    }
-    return _0x38ed36;
+  _filterThinkPlaceholderText(delta, final = false) {
+    return this._inlineReasoning.push(delta, final);
   }
   _handleOutputTextDelta(_0x1e0557, _0x566f00, _0x4824a0 = false) {
-    let _0x4cda43 = _0x4824a0 ? String(_0x1e0557 || "") : this._filterThinkPlaceholderText(_0x1e0557);
+    let _0x2a1bf3 = _0x4824a0 ? { text: String(_0x1e0557 || ""), reasoning: "" } : this._filterThinkPlaceholderText(_0x1e0557);
+    if (_0x2a1bf3.reasoning) this._handleReasoningDelta(_0x2a1bf3.reasoning, _0x566f00);
+    let _0x4cda43 = _0x2a1bf3.text;
     if (!_0x4cda43) {
       return;
     }
@@ -9219,7 +9124,8 @@ function sessionMonitorSnapshot() {
     recentSessions: _0x5611f7.length,
     peakConcurrentRequests: sessionMonitorPeak,
     maxHistorySessions: Ll(),
-    sessions: _0x5611f7
+    sessions: _0x5611f7,
+    calls: providerStreams.getRecentCalls()
   };
 }
 function nf(_0xa82113 = null) {
@@ -9252,7 +9158,7 @@ function of(_0x3c55ba = null) {
   };
 }
 
-// [self-use] __BYOK_VISION_PATCH__
+// [compat] __BYOK_VISION_PATCH__
 function _byokGuessVision(model, flag) {
   if (flag === true) return true;
   if (flag === false) return false;
@@ -10501,8 +10407,14 @@ function uf(_0x523bd9, _0x3e4f85, {
     }, _0x2acd6c);
     return true;
   };
+  const _byokStreamScope = providerStreams.createCascadeScope(_0x3e4f85, _0x14e80e, {
+    source: 'cascade', requestId: _0x346484, model: _0x55392c,
+    sessionId: _0x3c776e?.sessionKey || _0x13a0db?.sessionKey || _0x13a0db?.cascadeId || '',
+    onRecord: record => S(_.DETAIL, '[BYOK-CALL] ' + JSON.stringify(record))
+  });
   let _0x1f22af = () => {
     _0x55eeda += 1;
+    const _byokAttempt = _byokStreamScope.begin('anthropic', _0x55eeda);
     let _0x12c0e7 = new no(_0x346484, _0x55392c, _0x27c8c5, _0x252db0);
     let _0x14edd5;
     _0xc1a07a = _0x553342.request({
@@ -10595,6 +10507,7 @@ function uf(_0x523bd9, _0x3e4f85, {
       function _0x551a55(_0xd09c45) {
         let _0x4ad1d6 = bi(_0xd09c45 + "\n\n");
         for (let _0x5d5d24 of _0x4ad1d6) {
+          if (!_byokAttempt.observe(_0x5d5d24)) continue;
           let _0x18b31d = _0x12c0e7.processEvent(_0x5d5d24);
           if (_0x12c0e7.isDone) {
             let _0x382564 = _0x44f2eb(_0x12c0e7, _0x18b31d);
@@ -10624,12 +10537,13 @@ function uf(_0x523bd9, _0x3e4f85, {
       }
       _0x5ea95a();
       _0x381fb2.on("data", _0x5afd77 => {
+        if (!_byokAttempt.active()) return;
         if (_0x4445dd) {
           _0x4445dd.mark("first_upstream_chunk", "bytes=" + Buffer.byteLength(_0x5afd77));
         }
         _0x5ea95a();
         _0x3a67e6 += _0x5afd77;
-        let _0x4d1702 = _0x3a67e6.split("\n\n");
+        let _0x4d1702 = _0x3a67e6.split(/\r?\n\r?\n/);
         _0x3a67e6 = _0x4d1702.pop();
         for (let _0x2a9e95 of _0x4d1702) {
           _0x551a55(_0x2a9e95);
@@ -10642,28 +10556,13 @@ function uf(_0x523bd9, _0x3e4f85, {
         _0x5f1623 = true;
         _0x794028();
         _0x3b6605();
+        if (!_byokAttempt.active()) return;
+        if (!_0x44bd4c && !_byokAttempt.call.hasTerminal() && !_0x12c0e7.hasErrorEvent()) {
+          _0x14e80e.fail(re("上游流中断", _byokAttempt.call.eofError()));
+          return;
+        }
         if (!_0x44bd4c && (_0x3a67e6.trim() && _0x551a55(_0x3a67e6), !_0x44bd4c && (!!_0x12c0e7.isDone || !_0x12c0e7.hasErrorEvent() || !_0x15dbcc(_0x12c0e7.getStreamErrorHint())))) {
-          if (!_0x12c0e7.isDone && !_0x3e4f85.writableEnded) {
-            if (_0x12c0e7.hasMeaningfulOutput && !_0x12c0e7.stopReason) {
-              S(_.UPSTREAM, "Anthropic 流被上游提前关闭（疑似截断），追加不完整提示");
-              _0x14e80e.flushPendingText();
-              _0x14e80e.safeWrite(ge(St(_0x346484, STREAM_TRUNCATED_NOTICE, 0)));
-              _0x12c0e7.markIncomplete();
-            } else {
-              S(_.DETAIL, "Anthropic 流未收到 message_stop，强制结束");
-            }
-            let _0x4cefd4 = _0x12c0e7.processEvent({
-              event: "message_stop",
-              data: {}
-            });
-            let _0x36adcc = _0x44f2eb(_0x12c0e7, _0x4cefd4);
-            _0x4cefd4 = _0x36adcc.chunks;
-            Rn(_0x14e80e, _0x12c0e7, _0x4cefd4);
-            if (_0x36adcc.continue) {
-              _0x4b07e4(_0x12c0e7);
-              return;
-            }
-          }
+          // message_stop is required; never synthesize upstream success.
           _0x3d3c22(_0x12c0e7, _0x12c0e7.stopReason || "end");
         }
       });
@@ -10671,6 +10570,7 @@ function uf(_0x523bd9, _0x3e4f85, {
         _0x5f1623 = true;
         _0x794028();
         _0x3b6605();
+        if (!_byokAttempt.active()) return;
         if (!_0x14e80e.wasClosedByClient()) {
           fe("Anthropic 流被中止");
           _0x14e80e.fail(re("上游流中断", "Anthropic 连接被意外终止"));
@@ -10680,15 +10580,18 @@ function uf(_0x523bd9, _0x3e4f85, {
         _0x5f1623 = true;
         _0x794028();
         _0x3b6605();
+        if (!_byokAttempt.active()) return;
         if (!_0x14e80e.wasClosedByClient()) {
           fe("Anthropic 流错误: " + _0x57123f.message);
           _0x14e80e.fail(re("上游流错误", _0x57123f.message));
         }
       });
     });
+    _byokAttempt.attach(_0xc1a07a);
     _0x14edd5 = Xa(_0xc1a07a, _0x14e80e, Rd, "Anthropic");
     _0xc1a07a.on("error", _0x5b8c4a => {
       clearTimeout(_0x14edd5);
+      if (!_byokAttempt.active()) return;
       if (_0x14e80e.wasClosedByClient() && (_0x5b8c4a.code === "ECONNRESET" || _0x5b8c4a.code === "ECONNABORTED") || _0x14e80e.wasFinalized()) {
         return;
       }
@@ -10742,7 +10645,7 @@ function df(_0x1a5453, _0x5eff91, {
     requestedModel: _0x1301a7
   });
   let _0x3c1b2d = Ya(_0x92c154.apiPath);
-  let _0x2627a5 = _0x3c1b2d ? pf(_0x5e133a, _0x156012) : ff(_0x5e133a, _0x156012);
+  let _0x2627a5 = inlineReasoning.sanitizeInlineReasoningHistory(_0x3c1b2d ? pf(_0x5e133a, _0x156012) : ff(_0x5e133a, _0x156012)).messages;
   let _0x33c8e4 = cf(_0x3e67f0, _0x2048c3);
   let _0xdb432e = _0x33c8e4 ? qa(_0x2048c3, _0x357c8c, "OpenAI") : undefined;
   let _0xbc60c7 = _0x3c1b2d ? {
@@ -10888,8 +10791,14 @@ function df(_0x1a5453, _0x5eff91, {
     }, _0x2bc438);
     return true;
   };
+  const _byokStreamScope = providerStreams.createCascadeScope(_0x5eff91, _0x119147, {
+    source: 'cascade', requestId: _0x422b25, model: _0x5409c8,
+    sessionId: _0x8daf37?.sessionKey || _0x510db1?.sessionKey || _0x510db1?.cascadeId || '',
+    onRecord: record => S(_.DETAIL, '[BYOK-CALL] ' + JSON.stringify(record))
+  });
   let _0x259c4c = () => {
     _0x127578 += 1;
+    const _byokAttempt = _byokStreamScope.begin(_0x3c1b2d ? 'openai' : 'openai_responses', _0x127578);
     let _0x3c08f6 = new ro(_0x422b25, _0x5409c8, _0x1bca0a, _0x33c8e4);
     if (_0x33c8e4 && _0x2048c3) {
       _0x3c08f6.setAllowedTools(_0x2048c3.map(_0x49ed50 => _0x49ed50.name));
@@ -10986,6 +10895,7 @@ function df(_0x1a5453, _0x5eff91, {
       function _0x44a49f(_0x3f73ef) {
         let _0x2315e8 = Ri(_0x3f73ef + "\n");
         for (let _0x35c789 of _0x2315e8) {
+          if (!_byokAttempt.observe(_0x35c789)) continue;
           let _0x518ff5 = _0x3c08f6.processEvent(_0x35c789);
           if (_0x239bad && _0x3c08f6.hasReasoningOutput) {
             _0x239bad.mark("first_reasoning_delta", "event=" + (_0x35c789.type || "done"));
@@ -11013,12 +10923,13 @@ function df(_0x1a5453, _0x5eff91, {
       }
       _0x80157e();
       _0x283367.on("data", _0x3848a2 => {
+        if (!_byokAttempt.active()) return;
         if (_0x239bad) {
           _0x239bad.mark("first_upstream_chunk", "bytes=" + Buffer.byteLength(_0x3848a2));
         }
         _0x80157e();
         _0x21bbbf += _0x39e8f9.write(_0x3848a2);
-        let _0x1ff813 = _0x21bbbf.split("\n\n");
+        let _0x1ff813 = _0x21bbbf.split(/\r?\n\r?\n/);
         _0x21bbbf = _0x1ff813.pop();
         for (let _0x43d7df of _0x1ff813) {
           _0x44a49f(_0x43d7df);
@@ -11028,30 +10939,22 @@ function df(_0x1a5453, _0x5eff91, {
         _0x466df8 = true;
         _0x3ad216();
         _0x3cfb40();
+        if (!_byokAttempt.active()) return;
         _0x21bbbf += _0x39e8f9.end();
         if (_0x21bbbf.trim()) {
           _0x44a49f(_0x21bbbf);
+        }
+        if (!_byokAttempt.call.hasTerminal() && !_0x3c08f6.hasErrorEvent()) {
+          _0x119147.fail(re("上游流中断", _byokAttempt.call.eofError()));
+          return;
         }
         if (!!_0x3c08f6.isDone || !_0x3c08f6.hasErrorEvent() || !_0x4641ca(_0x3c08f6.getStreamErrorHint())) {
           if (_0x239bad) {
             _0x239bad.mark("upstream_eof", "attempt=" + _0x127578);
           }
           if (!_0x3c08f6.isDone && !_0x5eff91.writableEnded) {
-            if (_0x3c08f6.hasMeaningfulOutput && !_0x3c08f6.stopReason) {
-              S(_.UPSTREAM, "OpenAI 流被上游提前关闭（疑似截断），追加不完整提示");
-              _0x119147.flushPendingText();
-              _0x119147.safeWrite(ge(St(_0x422b25, STREAM_TRUNCATED_NOTICE, 0)));
-              _0x3c08f6.markIncomplete();
-            } else if (_0x3c08f6.stopReason) {
-              S(_.DETAIL, "OpenAI 流 EOF，已补结束帧 · stop=" + _0x3c08f6.stopReason);
-            } else {
-              S(_.DETAIL, _0x3c1b2d ? "OpenAI ChatCompletions 流 EOF，未收到 [DONE]，已补结束帧" : "OpenAI Responses 流 EOF，未收到 response.completed，已补结束帧");
-            }
-            Rn(_0x119147, _0x3c08f6, _0x3c08f6.processEvent({
-              done: true,
-              type: "done",
-              data: null
-            }));
+            // A Chat finish_reason is valid even without a separate [DONE].
+            Rn(_0x119147, _0x3c08f6, _0x3c08f6.processEvent({ done: true, type: 'done', data: null }));
           }
           br(_0x119147, _0x3c08f6, "OpenAI", null, {
             model: _0x5409c8,
@@ -11063,6 +10966,7 @@ function df(_0x1a5453, _0x5eff91, {
         _0x466df8 = true;
         _0x3ad216();
         _0x3cfb40();
+        if (!_byokAttempt.active()) return;
         if (!_0x119147.wasClosedByClient()) {
           fe("OpenAI 流被中止");
           _0x5a3ba8("stream aborted before completion");
@@ -11073,6 +10977,7 @@ function df(_0x1a5453, _0x5eff91, {
         _0x466df8 = true;
         _0x3ad216();
         _0x3cfb40();
+        if (!_byokAttempt.active()) return;
         if (!_0x119147.wasClosedByClient()) {
           fe("OpenAI 流错误: " + _0x2b1c36.message);
           _0x5a3ba8("stream error: " + _0x2b1c36.message);
@@ -11080,9 +10985,11 @@ function df(_0x1a5453, _0x5eff91, {
         }
       });
     });
+    _byokAttempt.attach(_0x14d89c);
     _0x5662a4 = Xa(_0x14d89c, _0x119147, bd, "OpenAI");
     _0x14d89c.on("error", _0xddfd18 => {
       clearTimeout(_0x5662a4);
+      if (!_byokAttempt.active()) return;
       if (_0x119147.wasClosedByClient() && (_0xddfd18.code === "ECONNRESET" || _0xddfd18.code === "ECONNABORTED") || _0x119147.wasFinalized()) {
         return;
       }
@@ -12872,7 +12779,7 @@ function ep(_0x5e0700, _0x5b5862) {
       _0x5b5862.writeHead(404, {
         "content-type": "text/plain; charset=utf-8"
       });
-      _0x5b5862.end("Use the Devin BYOK Bridge panel in the IDE sidebar.");
+      _0x5b5862.end("Use the Devin Model Gateway panel in the IDE sidebar.");
       return;
     }
     if ((_0x5e0700.url === "/api/chat-queue" || _0x5e0700.url.startsWith("/api/chat-queue?")) && _0x5e0700.method === "GET") {
@@ -13153,7 +13060,8 @@ on.listen(nn, gc, () => {
   console.log("   BYOK models (*_BYOK) -> your gateway; official models -> Codeium");
   console.log("   Model capture: " + (process.env.MODEL_CAPTURE_PATH || "(disabled)"));
   console.log("   History cache: " + (process.env.BYOK_HISTORY_CACHE_PATH || "(memory-only)"));
-  console.log("   http.proxy=http://localhost:" + nn + "  http.proxyStrictSSL=false\n");
+  console.log("   http.proxy=http://localhost:" + nn + "  http.proxyStrictSSL=false");
+  console.log("");
   setImmediate(() => {
     try {
       if (process.env.MODEL_CAPTURE_PATH) {

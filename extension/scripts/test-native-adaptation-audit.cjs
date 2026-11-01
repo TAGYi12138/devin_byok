@@ -1,0 +1,33 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { DatabaseSync } = require('node:sqlite');
+const { audit } = require('./audit-native-adaptation.cjs');
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'byok-readonly-audit-'));
+const file = path.join(dir, 'sessions.db');
+fs.writeFileSync(path.join(dir, 'localBindings.json'), JSON.stringify({ bindings: { 'bound-high': { providerId: 'fixture', modelId: 'fixture' } } }));
+const db = new DatabaseSync(file);
+db.exec('CREATE TABLE sessions(id TEXT, model TEXT, main_chain_id INTEGER, last_activity_at INTEGER); CREATE TABLE message_nodes(session_id TEXT, node_id INTEGER, parent_node_id INTEGER, chat_message TEXT, metadata TEXT)');
+db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run('private-session-a', 'bound-high', 2, 2);
+db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run('private-session-b', 'new-model', 4, 1);
+const add = db.prepare('INSERT INTO message_nodes VALUES(?,?,?,?,?)');
+const assistant = (model, metrics) => JSON.stringify({ role: 'assistant', content: 'private prompt output', metadata: { generation_model: model, metrics } });
+add.run('private-session-a', 1, null, assistant('compactor', null), JSON.stringify({ summarized_from: 0 }));
+add.run('private-session-a', 2, 1, assistant('bound-high', { input_tokens: 10, cache_read_tokens: 20, output_tokens: 3 }), JSON.stringify({ num_tokens_preceding: 30 }));
+add.run('private-session-b', 4, null, assistant('old-model', { input_tokens: 12, cache_read_tokens: 0 }), JSON.stringify({ num_tokens_preceding: 13 }));
+add.run('private-session-b', 5, null, assistant('compactor', null), JSON.stringify({ summarized_from: 3 }));
+db.close();
+const before = fs.readFileSync(file);
+const result = audit({ configDir: dir, dbPath: file });
+assert(fs.readFileSync(file).equals(before), 'audit changed database');
+assert.equal(result.sessions[0].activeCompactor, true);
+assert.equal(result.sessions[0].latestUsage.accountingAgrees, true);
+assert.equal(result.sessions[1].activeCompactor, false, 'off-chain summary was counted');
+assert.equal(result.sessions[1].latestUsage.matchesSelectedModel, false);
+assert.equal(result.sessions[1].latestUsage.accountingAgrees, false);
+assert(!JSON.stringify(result).includes('private-session') && !JSON.stringify(result).includes('private prompt'));
+console.log('NATIVE_ADAPTATION_AUDIT_OK readonly=verified active-chain=verified selected-model-mismatch=reported identifiers=hashed');

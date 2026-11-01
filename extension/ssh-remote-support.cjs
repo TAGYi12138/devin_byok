@@ -3,13 +3,18 @@
 const crypto = require("node:crypto");
 const childProcess = require("node:child_process");
 const fs = require("node:fs");
+const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 
 const DEFAULT_REMOTE_PORT = 16778;
 const LOCAL_PROXY_PORT = 6778;
 const AGENT_IDS = ["devin-cli", "devin", "devin-local"];
-const REMOTE_AGENT_ENABLE_IDS = ["devin-cli", "claude-acp", "devin-cloud"];
+const SYSTEM_CA_BUNDLE_PATHS = [
+  "/etc/ssl/certs/ca-certificates.crt",
+  "/etc/pki/tls/certs/ca-bundle.crt",
+  "/etc/ssl/cert.pem",
+];
 
 function decodeRemoteAuthority(authority) {
   const text = String(authority || "");
@@ -44,11 +49,18 @@ function inferRemoteHome(remotePath) {
   return null;
 }
 
-function remoteAcpRegistryPath(remotePath, configured = "") {
+function remoteAcpRegistryPath(remotePath, configured = "", appName = "", remoteHome = "") {
   const explicit = String(configured || "").trim();
   if (explicit) return explicit;
-  const home = inferRemoteHome(remotePath) || "/root";
-  return `${home}/.devin-server-next/data/User/acp/registry.json`;
+  const home = remoteHome || inferRemoteHome(remotePath) || "/root";
+  // Devin's ACP LocalRegistry uses getWindsurfConfigDirectory(), not the
+  // remote VS Code server's data/User directory. Match its Linux app channels.
+  const name = String(appName || "");
+  let configDir = ".windsurf";
+  if (name.startsWith("Devin - Insiders") || name.startsWith("Windsurf - Insiders")) configDir = ".windsurf-insiders";
+  else if (name.startsWith("Devin - Next") || name.startsWith("Windsurf - Next")) configDir = ".windsurf-next";
+  else if (name.startsWith("Devin - Airgap") || name.startsWith("Windsurf - Airgap")) configDir = ".windsurf-airgap";
+  return `${home}/${configDir}/acp/registry.json`;
 }
 
 function bundledAcpRegistry() {
@@ -88,6 +100,9 @@ function managedBlock(host, remotePort = DEFAULT_REMOTE_PORT) {
     `# >>> Devin BYOK Bridge SSH ${marker}`,
     `Host ${host}`,
     `  RemoteForward 127.0.0.1:${remotePort} 127.0.0.1:${LOCAL_PROXY_PORT}`,
+    // Remote extensions inherit the UI's http.proxy=127.0.0.1:6778. Keep
+    // that loopback address reachable as well as the ACP agent proxy port.
+    ...(remotePort === LOCAL_PROXY_PORT ? [] : [`  RemoteForward 127.0.0.1:${LOCAL_PROXY_PORT} 127.0.0.1:${LOCAL_PROXY_PORT}`]),
     `# <<< Devin BYOK Bridge SSH ${marker}`,
   ].join(os.EOL);
 }
@@ -117,7 +132,7 @@ function removeManagedBlock(original, host) {
 }
 
 function validateHostAlias(host) {
-  if (!host || /[\s\r\n\0]/.test(host) || host.startsWith("-")) {
+  if (!host || /[\s\r\n\0*?!]/.test(host) || host.startsWith("-")) {
     throw new Error("无法从 Remote SSH 会话识别安全的主机别名");
   }
   return host;
@@ -142,6 +157,22 @@ function findLocalCa() {
 function resolveSshConfigPath(vscode) {
   const configured = String(vscode.workspace.getConfiguration("remote.devinSSH").get("configFile") || "").trim();
   return configured ? path.resolve(configured) : path.join(os.homedir(), ".ssh", "config");
+}
+
+function localProxyReady(timeoutMs = 350) {
+  return new Promise(resolve => {
+    const socket = net.connect({ host: "127.0.0.1", port: LOCAL_PROXY_PORT });
+    let settled = false;
+    const finish = ready => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(ready);
+    };
+    socket.once("connect", () => finish(true));
+    socket.once("error", () => finish(false));
+    socket.setTimeout(timeoutMs, () => finish(false));
+  });
 }
 
 function writeFileAtomically(file, text) {
@@ -170,36 +201,43 @@ function hardenWindowsSshConfig(file) {
   }
 }
 
-function remoteContext(vscode) {
+function remoteContext(vscode, context) {
   if (vscode.env.remoteName !== "ssh-remote") return null;
-  const folder = remoteFolder(vscode);
+  let folder = remoteFolder(vscode);
+  if(!folder){
+    const connection=context?.workspaceState?.get('byokBridge.ssh.connection');
+    if(connection?.authority&&decodeRemoteAuthority(connection.authority)===connection.host)folder={uri:vscode.Uri.from({scheme:'vscode-remote',authority:connection.authority,path:'/'})};
+  }
   if (!folder) return null;
   const host = decodeRemoteAuthority(folder.uri.authority);
   if (!host) return null;
   return { folder, host: validateHostAlias(host) };
 }
 
+async function remoteHomeFolder(vscode,folder){
+  if(inferRemoteHome(folder.uri.path))return folder;
+  const read=async file=>Buffer.from(await vscode.workspace.fs.readFile(folder.uri.with({path:file}))).toString('utf8');
+  const status=await read('/proc/self/status'),uid=status.match(/^Uid:\s*(\d+)/m)?.[1];
+  const home=uid&&(await read('/etc/passwd')).split('\n').map(line=>line.split(':')).find(parts=>parts[2]===uid)?.[5];
+  if(!home||!home.startsWith('/')||/[\r\n\0]/.test(home))throw Error('无法确认 SSH 远端用户目录，请先打开远端用户目录下的文件夹');
+  return {...folder,remoteHome:home};
+}
+
 function settingsBackupKey(host) {
   return "byokBridge.ssh.settingsBackup." + markerForHost(host);
 }
 
-async function updateRemoteProcessSettings(vscode, context, host, folder, remotePort, caPath) {
+async function updateRemoteProcessSettings(vscode, context, host, folder, remotePort, caPath, bundlePath) {
   const proxy = `http://127.0.0.1:${remotePort}`;
   const agentConfig = vscode.workspace.getConfiguration("devin.acp", folder.uri);
   const existing = agentConfig.get("agentEnv") || {};
-  // `http.proxy` is an application/user setting and cannot be written at
-  // workspace scope. In an SSH window it would also point the local renderer
-  // at the Linux loopback, so configure the Remote SSH server proxy instead.
-  const sshConfig = vscode.workspace.getConfiguration("remote.devinSSH");
+  // Bootstrap proxy selection belongs to the per-host native SSH preflight.
+  // A global loopback proxy may outlive its tunnel or leak into other hosts.
   const backupKey = settingsBackupKey(host);
   if (!context.workspaceState.get(backupKey)) {
     const agentInspect = agentConfig.inspect("agentEnv") || {};
-    const httpInspect = sshConfig.inspect("httpProxy") || {};
-    const httpsInspect = sshConfig.inspect("httpsProxy") || {};
     await context.workspaceState.update(backupKey, {
       agentEnv: { present: agentInspect.workspaceValue !== undefined, value: agentInspect.workspaceValue },
-      httpProxy: { present: httpInspect.globalValue !== undefined, value: httpInspect.globalValue },
-      httpsProxy: { present: httpsInspect.globalValue !== undefined, value: httpsInspect.globalValue },
     });
   }
   const merged = { ...existing };
@@ -211,6 +249,7 @@ async function updateRemoteProcessSettings(vscode, context, host, folder, remote
       NO_PROXY: "localhost,127.0.0.1,::1",
       no_proxy: "localhost,127.0.0.1,::1",
       NODE_EXTRA_CA_CERTS: caPath,
+      SSL_CERT_FILE: bundlePath,
       BYOK_LOCAL_PROBE: "1",
       BYOK_LOCAL_PROBE_MITM: "1",
       BYOK_SSH_REMOTE: "1",
@@ -218,12 +257,9 @@ async function updateRemoteProcessSettings(vscode, context, host, folder, remote
   }
   // Workspace scope is deliberate: a Linux CA path must never overwrite the
   // Windows user setting used by normal local windows.
-  await agentConfig.update("agentEnv", merged, vscode.ConfigurationTarget.Workspace);
-  // These settings are consumed by the Remote SSH resolver when it launches
-  // the Linux server. They are global by design, while the local `http.proxy`
-  // remains untouched.
-  await sshConfig.update("httpProxy", proxy, vscode.ConfigurationTarget.Global);
-  await sshConfig.update("httpsProxy", proxy, vscode.ConfigurationTarget.Global);
+  if (JSON.stringify(merged) !== JSON.stringify(existing)) {
+    await agentConfig.update("agentEnv", merged, vscode.ConfigurationTarget.Workspace);
+  }
 }
 
 async function restoreRemoteProcessSettings(vscode, context, host, folder) {
@@ -234,14 +270,16 @@ async function restoreRemoteProcessSettings(vscode, context, host, folder) {
   const sshConfig = vscode.workspace.getConfiguration("remote.devinSSH");
   const restore = item => item && item.present ? item.value : undefined;
   await agentConfig.update("agentEnv", restore(backup.agentEnv), vscode.ConfigurationTarget.Workspace);
-  await sshConfig.update("httpProxy", restore(backup.httpProxy), vscode.ConfigurationTarget.Global);
-  await sshConfig.update("httpsProxy", restore(backup.httpsProxy), vscode.ConfigurationTarget.Global);
+  // Restore proxy settings only for backups made by older versions that
+  // actually changed them. New per-host setup never owns global SSH proxies.
+  if (backup.httpProxy) await sshConfig.update("httpProxy", restore(backup.httpProxy), vscode.ConfigurationTarget.Global);
+  if (backup.httpsProxy) await sshConfig.update("httpsProxy", restore(backup.httpsProxy), vscode.ConfigurationTarget.Global);
   await context.workspaceState.update(backupKey, undefined);
   return true;
 }
 
 async function syncRemoteAcpRegistry(vscode, folder, configuredPath = "") {
-  const registryPath = remoteAcpRegistryPath(folder.uri.path, configuredPath);
+  const registryPath = remoteAcpRegistryPath(folder.uri.path, configuredPath, vscode.env.appName,folder.remoteHome);
   const registryUri = vscode.Uri.from({
     scheme: folder.uri.scheme,
     authority: folder.uri.authority,
@@ -250,8 +288,10 @@ async function syncRemoteAcpRegistry(vscode, folder, configuredPath = "") {
   const parentPath = registryPath.slice(0, registryPath.lastIndexOf("/"));
   await vscode.workspace.fs.createDirectory(registryUri.with({ path: parentPath }));
   let registry = bundledAcpRegistry();
+  let previousBytes = null;
   try {
     const bytes = await vscode.workspace.fs.readFile(registryUri);
+    previousBytes = Buffer.from(bytes);
     const existing = JSON.parse(Buffer.from(bytes).toString("utf8"));
     if (existing && Array.isArray(existing.agents)) {
       const byId = new Map(existing.agents.filter(agent => agent && typeof agent.id === "string").map(agent => [agent.id, agent]));
@@ -259,12 +299,13 @@ async function syncRemoteAcpRegistry(vscode, folder, configuredPath = "") {
       registry = { ...existing, version: "1.0.0", agents: [...byId.values()] };
     }
   } catch {}
-  await vscode.workspace.fs.writeFile(registryUri, Buffer.from(JSON.stringify(registry, null, 2) + "\n", "utf8"));
-  const remoteAgentConfig = vscode.workspace.getConfiguration("devin.acp", folder.uri);
-  const enabled = { ...(remoteAgentConfig.get("enabledAgents") || {}) };
-  for (const id of REMOTE_AGENT_ENABLE_IDS) enabled[id] = true;
-  await remoteAgentConfig.update("enabledAgents", enabled, vscode.ConfigurationTarget.Global);
-  return { registryPath, agentIds: registry.agents.map(agent => agent.id) };
+  const nextBytes = Buffer.from(JSON.stringify(registry, null, 2) + "\n", "utf8");
+  const changed = !previousBytes || !previousBytes.equals(nextBytes);
+  if (changed) await vscode.workspace.fs.writeFile(registryUri, nextBytes);
+  // The remote User/settings.json is updated below. Updating Global here
+  // targets the UI host's user settings, which can be unsaved and must not
+  // prevent the remote registry from being written.
+  return { registryPath, agentIds: registry.agents.map(agent => agent.id), changed };
 }
 
 async function readRemoteJson(vscode, uri) {
@@ -278,18 +319,35 @@ async function readRemoteJson(vscode, uri) {
 }
 
 async function mergeRemoteSettings(vscode, folder, relativePath, patch) {
-  const home = inferRemoteHome(folder.uri.path) || "/root";
-  const fullPath = `${home}/.devin-server-next/data/${relativePath}`;
+  const home = folder.remoteHome || inferRemoteHome(folder.uri.path) || "/root";
+  const channel=/Next/.test(String(vscode.env.appName||''))?'.devin-server-next':'.devin-server';
+  const fullPath = `${home}/${channel}/data/${relativePath}`;
   const uri = vscode.Uri.from({ scheme: folder.uri.scheme, authority: folder.uri.authority, path: fullPath });
   const parent = fullPath.slice(0, fullPath.lastIndexOf("/"));
   await vscode.workspace.fs.createDirectory(uri.with({ path: parent }));
   const current = await readRemoteJson(vscode, uri);
   const merged = { ...current, ...patch };
-  await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(merged, null, 2) + "\n", "utf8"));
+  for (const key of ["devin.acp.enabledAgents", "windsurf.acp.enabledAgents", "devin.acp.agentEnv"]) {
+    if (current[key] && typeof current[key] === "object" && !Array.isArray(current[key])) {
+      merged[key] = { ...current[key], ...patch[key] };
+      if (key === "devin.acp.agentEnv") {
+        for (const id of AGENT_IDS) {
+          const existingEnv = current[key][id];
+          if (existingEnv && typeof existingEnv === "object" && !Array.isArray(existingEnv)) {
+            merged[key][id] = { ...existingEnv, ...patch[key][id] };
+          }
+        }
+      }
+    }
+  }
+  const nextBytes = Buffer.from(JSON.stringify(merged, null, 2) + "\n", "utf8");
+  let previousBytes;
+  try { previousBytes = Buffer.from(await vscode.workspace.fs.readFile(uri)); } catch {}
+  if (!previousBytes || !previousBytes.equals(nextBytes)) await vscode.workspace.fs.writeFile(uri, nextBytes);
   return fullPath;
 }
 
-async function syncRemoteAgentSettings(vscode, folder, remotePort, caPath) {
+async function syncRemoteAgentSettings(vscode, folder, remotePort, caPath, bundlePath) {
   const proxy = `http://127.0.0.1:${remotePort}`;
   const env = {};
   for (const id of AGENT_IDS) {
@@ -299,6 +357,7 @@ async function syncRemoteAgentSettings(vscode, folder, remotePort, caPath) {
       NO_PROXY: "localhost,127.0.0.1,::1",
       no_proxy: "localhost,127.0.0.1,::1",
       NODE_EXTRA_CA_CERTS: caPath,
+      SSL_CERT_FILE: bundlePath,
       BYOK_LOCAL_PROBE: "1",
       BYOK_LOCAL_PROBE_MITM: "1",
       BYOK_SSH_REMOTE: "1",
@@ -308,14 +367,40 @@ async function syncRemoteAgentSettings(vscode, folder, remotePort, caPath) {
     "devin.acp.enabledAgents": { "devin-cli": true, "claude-acp": true, "devin-cloud": true },
     "windsurf.acp.enabledAgents": { "devin-cli": true, "claude-acp": true, "devin-cloud": true },
     "devin.acp.agentEnv": env,
-    "devin.acp.agentPreferences": { "devin-cli": { model: "default", mode: "plan" } },
-    "windsurf.acp.agentPreferences": { "devin-cli": { model: "default", mode: "plan" } },
   };
   const files = [];
   for (const relativePath of ["User/settings.json", "Machine/settings.json"]) {
     files.push(await mergeRemoteSettings(vscode, folder, relativePath, patch));
   }
   return files;
+}
+
+async function writeRemoteCaBundle(vscode, folder, caPath, caBytes) {
+  const base = { scheme: folder.uri.scheme, authority: folder.uri.authority };
+  let systemBytes;
+  let systemPath;
+  for (const candidate of SYSTEM_CA_BUNDLE_PATHS) {
+    try {
+      const bytes = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.from({ ...base, path: candidate })));
+      if (bytes.includes(Buffer.from("-----BEGIN CERTIFICATE-----"))) {
+        systemBytes = bytes;
+        systemPath = candidate;
+        break;
+      }
+    } catch {}
+  }
+  if (!systemBytes) throw new Error("远端系统 CA 证书包不可读取，无法安全配置 Devin Local 的 TLS 信任");
+  if (!caBytes.includes(Buffer.from("-----BEGIN CERTIFICATE-----"))) {
+    throw new Error("本地代理 CA 证书格式无效");
+  }
+  const bundlePath = `${caPath.slice(0, caPath.lastIndexOf("/"))}/ca-bundle.pem`;
+  const bundleUri = vscode.Uri.from({ ...base, path: bundlePath });
+  const separator = systemBytes.at(-1) === 10 ? Buffer.alloc(0) : Buffer.from("\n");
+  const bundleBytes = Buffer.concat([systemBytes, separator, caBytes, Buffer.from("\n")]);
+  let existing;
+  try { existing = Buffer.from(await vscode.workspace.fs.readFile(bundleUri)); } catch {}
+  if (!existing || !existing.equals(bundleBytes)) await vscode.workspace.fs.writeFile(bundleUri, bundleBytes);
+  return { bundlePath, systemPath };
 }
 
 function createSshRemoteSupport({ vscode, context, logger }) {
@@ -325,35 +410,52 @@ function createSshRemoteSupport({ vscode, context, logger }) {
     return vscode.workspace.getConfiguration("byokBridge.ssh").get(name, fallback);
   }
 
-  async function installForward(interactive = false) {
-    const remote = remoteContext(vscode);
-    if (!remote) return { ok: false, skipped: true, reason: "not-ssh-remote" };
+  async function installForwardForHost(host, interactive = false) {
+    if (!setting("enabled", true)) return { ok: false, skipped: true, reason: "disabled" };
+    host = validateHostAlias(String(host || "").trim());
     const remotePort = Number(setting("remotePort", DEFAULT_REMOTE_PORT));
     if (!Number.isInteger(remotePort) || remotePort < 1024 || remotePort > 65535) {
       throw new Error("SSH 远端代理端口必须是 1024–65535 的整数");
     }
     const configPath = resolveSshConfigPath(vscode);
     const before = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : "";
-    const after = upsertManagedBlock(before, remote.host, remotePort);
+    const after = upsertManagedBlock(before, host, remotePort);
     const changed = after !== before;
     if (changed) writeFileAtomically(configPath, after);
     else hardenWindowsSshConfig(configPath);
-    logger.info(`[SSH] reverse forward ${remote.host} 127.0.0.1:${remotePort} -> local 127.0.0.1:${LOCAL_PROXY_PORT}${changed ? " installed" : " verified"}`);
+    logger.info(`[SSH] reverse forward ${host} 127.0.0.1:${remotePort} -> local 127.0.0.1:${LOCAL_PROXY_PORT}${changed ? " installed" : " verified"}`);
     if (interactive) {
       vscode.window.showInformationMessage(changed
-        ? `已为 ${remote.host} 写入 BYOK SSH 通道。请重新连接该 SSH 主机。`
-        : `${remote.host} 的 BYOK SSH 通道配置已经存在。`);
+        ? `已为 ${host} 写入 BYOK SSH 通道。请重新连接该 SSH 主机。`
+        : `${host} 的 BYOK SSH 通道配置已经存在。`);
     }
-    return { ok: true, changed, host: remote.host, remotePort, configPath };
+    // The native resolver reads this value after the hook returns. Supply it
+    // only for this host, without changing the application's global proxy.
+    let ready = false;
+    if (!context.globalState?.get("userStopped")) {
+      for (let attempt = 0; attempt < 8 && !ready; attempt++) {
+        ready = await localProxyReady();
+        if (!ready && attempt < 7) await new Promise(resolve => setTimeout(resolve, 350));
+      }
+    }
+    if (!ready) logger.warn(`[SSH] local 127.0.0.1:${LOCAL_PROXY_PORT} is unavailable; ${host} will use its existing resolver proxy setting`);
+    return { ok: true, changed, host, remotePort, configPath, ...(ready ? { proxy: `http://127.0.0.1:${remotePort}` } : {}) };
+  }
+
+  async function installForward(interactive = false) {
+    const remote = remoteContext(vscode,context);
+    if (!remote) return { ok: false, skipped: true, reason: "not-ssh-remote" };
+    return installForwardForHost(remote.host, interactive);
   }
 
   async function installRemoteCaAndSettings(interactive = false) {
-    const remote = remoteContext(vscode);
+    const remote = remoteContext(vscode,context);
     if (!remote) return { ok: false, skipped: true, reason: "not-ssh-remote" };
+    remote.folder=await remoteHomeFolder(vscode,remote.folder);
     const localCa = findLocalCa();
     if (!localCa) throw new Error("本地 6778 CA 尚未生成，请先启动 Local 后重试");
     const configuredCaPath = String(setting("remoteCaPath", "") || "").trim();
-    const inferredHome = inferRemoteHome(remote.folder.uri.path);
+    const inferredHome = remote.folder.remoteHome || inferRemoteHome(remote.folder.uri.path);
     const caPath = configuredCaPath || (inferredHome
       ? `${inferredHome}/.config/BYOK-Local-Probe/certs/rootCA.pem`
       : `${remote.folder.uri.path.replace(/\/$/, "")}/.devin-byok/rootCA.pem`);
@@ -364,21 +466,34 @@ function createSshRemoteSupport({ vscode, context, logger }) {
     });
     const certDir = caUri.with({ path: caPath.slice(0, caPath.lastIndexOf("/")) });
     await vscode.workspace.fs.createDirectory(certDir);
-    await vscode.workspace.fs.writeFile(caUri, fs.readFileSync(localCa));
+    const caBytes = fs.readFileSync(localCa);
+    await vscode.workspace.fs.writeFile(caUri, caBytes);
+    const caBundle = await writeRemoteCaBundle(vscode, remote.folder, caPath, caBytes);
     const remotePort = Number(setting("remotePort", DEFAULT_REMOTE_PORT));
-    await updateRemoteProcessSettings(vscode, context, remote.host, remote.folder, remotePort, caPath);
     const registry = await syncRemoteAcpRegistry(vscode, remote.folder, setting("remoteAcpRegistryPath", ""));
-    const settings = await syncRemoteAgentSettings(vscode, remote.folder, remotePort, caPath);
-    logger.info(`[SSH] remote CA installed ${caPath}; agent proxy=http://127.0.0.1:${remotePort}; ACP registry=${registry.registryPath}; settings=${settings.join(",")}`);
+    const settings = await syncRemoteAgentSettings(vscode, remote.folder, remotePort, caPath, caBundle.bundlePath);
+    let settingsPending = null;
+    try {
+      await updateRemoteProcessSettings(vscode, context, remote.host, remote.folder, remotePort, caPath, caBundle.bundlePath);
+    } catch (error) {
+      settingsPending = String(error && error.message || error);
+      logger.warn(`[SSH] UI settings pending for ${remote.host}: ${settingsPending}`);
+    }
+    logger.info(`[SSH] remote CA installed ${caPath}; TLS bundle=${caBundle.bundlePath} (system=${caBundle.systemPath}); agent proxy=http://127.0.0.1:${remotePort}; ACP registry=${registry.registryPath}; settings=${settings.join(",")}`);
     if (interactive) {
       vscode.window.showInformationMessage("Linux 远端 CA 和 Devin 代理环境已更新；请重启当前 Devin 会话。");
     }
-    return { ok: true, host: remote.host, remotePort, caPath };
+    return { ok: true, host: remote.host, remotePort, caPath, bundlePath: caBundle.bundlePath, registryChanged: registry.changed, settingsPending };
   }
 
-  async function prepare() {
+  let preparation=null;
+  function prepare(){
+    if(!preparation)preparation=prepareOnce().finally(()=>{preparation=null;});
+    return preparation;
+  }
+  async function prepareOnce() {
     if (!setting("enabled", true)) return { ok: false, skipped: true, reason: "disabled" };
-    const remote = remoteContext(vscode);
+    const remote = remoteContext(vscode,context);
     if (!remote) return { ok: false, skipped: true, reason: "not-ssh-remote" };
     const forward = await installForward(false);
     try {
@@ -388,9 +503,9 @@ function createSshRemoteSupport({ vscode, context, logger }) {
       last = { ok: false, forward, error: String(error && error.message || error) };
       logger.warn("[SSH] remote setup pending: " + last.error);
     }
-    if (forward.changed) {
+    if (forward.changed || last.remote?.registryChanged) {
       vscode.window.showWarningMessage(
-        `Devin BYOK 已为 ${forward.host} 安装 SSH 通道。重新连接该主机后，Linux 远端请求才会进入本机 6778。`,
+        `Devin BYOK 已更新 ${forward.host} 的 SSH 通道或 ACP 注册表。请重新连接该主机以加载远端 ACP 配置。`,
         "打开 SSH 日志"
       ).then(choice => {
         if (choice === "打开 SSH 日志") vscode.commands.executeCommand("windsurf-remote-openssh.showLog");
@@ -400,7 +515,7 @@ function createSshRemoteSupport({ vscode, context, logger }) {
   }
 
   async function remove(interactive = true) {
-    const remote = remoteContext(vscode);
+    const remote = remoteContext(vscode,context);
     if (!remote) return { ok: false, skipped: true, reason: "not-ssh-remote" };
     const configPath = resolveSshConfigPath(vscode);
     let changed = false;
@@ -421,9 +536,20 @@ function createSshRemoteSupport({ vscode, context, logger }) {
     await installRemoteCaAndSettings(true);
   });
   const removeCommand = vscode.commands.registerCommand("byokBridge.removeSsh", () => remove(true));
-  context.subscriptions.push(configureCommand, removeCommand);
+  const preflightCommand = vscode.commands.registerCommand("byokBridge.prepareSshHost", async(host,authority) => {
+    host=validateHostAlias(String(host||'').trim());
+    if(typeof authority==='string'&&decodeRemoteAuthority(authority)===host)await context.workspaceState?.update('byokBridge.ssh.connection',{host,authority});
+    const result=await installForwardForHost(host);
+    // This continues after the resolver returns. Remote filesystem access may
+    // wait for the SSH connection; it must never block that same connection.
+    void prepare().catch(error=>logger.warn('[SSH] remote setup pending: '+String(error?.message||error)));
+    return result;
+  });
+  context.subscriptions.push(configureCommand, removeCommand, preflightCommand);
+  const foldersChanged=vscode.workspace.onDidChangeWorkspaceFolders?.(()=>{void prepare().catch(error=>logger.warn('[SSH] remote setup pending: '+String(error?.message||error)));});
+  if(foldersChanged)context.subscriptions.push(foldersChanged);
 
-  return { prepare, installForward, installRemoteCaAndSettings, remove, getStatus: () => last };
+  return { prepare, installForward, installForwardForHost, installRemoteCaAndSettings, remove, getStatus: () => last };
 }
 
 module.exports = {
@@ -431,6 +557,11 @@ module.exports = {
   LOCAL_PROXY_PORT,
   decodeRemoteAuthority,
   inferRemoteHome,
+  remoteAcpRegistryPath,
+  syncRemoteAcpRegistry,
+  syncRemoteAgentSettings,
+  writeRemoteCaBundle,
+  remoteHomeFolder,
   managedBlock,
   upsertManagedBlock,
   removeManagedBlock,

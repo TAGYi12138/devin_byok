@@ -1,128 +1,184 @@
 {
-	"name": "devin-byok-bridge",
-	"displayName": "Devin BYOK Bridge",
-	"description": "Devin BYOK Bridge（自用版）- 把模型请求路由到你自己的 OpenAI 兼容或 Anthropic 原生 API 供应商（已移除在线更新）",
-	"version": "1.0.106",
-	"publisher": "byok-dev",
-	"engines": {
-		"vscode": "^1.85.0"
-	},
-	"main": "./extension.js",
-	"extensionKind": [
-		"ui"
-	],
-	"activationEvents": [
-		"onStartupFinished"
-	],
-	"categories": [
-		"Other"
-	],
-	"icon": "media/logo.png",
-	"scripts": {
-		"check:patch": "node scripts/check-patch-syntax.js",
-		"check:code": "node scripts/check-code-integrity.js",
-		"package": "node scripts/package.js"
-	},
-	"dependencies": {
-		"node-forge": "^1.3.1"
-	},
-	"devDependencies": {
-		"esbuild": "^0.25.0",
-		"javascript-obfuscator": "^4.1.1",
-		"sharp": "^0.34.5"
-	},
-	"contributes": {
-		"configuration": {
-			"title": "Devin BYOK Bridge",
-			"properties": {
-				"byokBridge.ssh.enabled": {
-					"type": "boolean",
-					"default": true,
-					"description": "在 Remote SSH 窗口中配置 Linux 远端到本机 6778 的安全回环通道。"
-				},
-				"byokBridge.ssh.remotePort": {
-					"type": "integer",
-					"default": 16778,
-					"minimum": 1024,
-					"maximum": 65535,
-					"description": "Linux 远端用于连接本机 BYOK 代理的回环端口。修改后需重新连接 SSH。"
-				},
-				"byokBridge.ssh.remoteCaPath": {
-					"type": "string",
-					"default": "",
-					"description": "Linux 远端 CA 公共证书路径。留空时根据远端工作区路径推断用户主目录。"
-				},
-				"byokBridge.ssh.remoteAcpRegistryPath": {
-					"type": "string",
-					"default": "",
-					"description": "Linux 远端 ACP 注册表路径。留空时使用 ~/.devin-server-next/data/User/acp/registry.json。"
-				}
-			}
-		},
-		"viewsContainers": {
-			"activitybar": [
-				{
-					"id": "byokBridge",
-					"title": "Devin BYOK Bridge",
-					"icon": "media/logo.svg"
-				}
-			]
-		},
-		"views": {
-			"byokBridge": [
-				{
-					"type": "webview",
-					"id": "byokBridge.panel",
-					"name": "中转接入面板",
-					"contextualTitle": "Devin BYOK Bridge"
-				}
-			]
-		},
-		"commands": [
-			{
-				"command": "byokBridge.openPanel",
-				"title": "Devin BYOK Bridge: 打开控制面板"
-			},
-			{
-				"command": "byokBridge.refreshLocalModels",
-				"title": "Devin BYOK Local: 刷新原生模型列表"
-			},
-			{
-				"command": "byokBridge.showOutput",
-				"title": "Devin BYOK Bridge: 显示输出日志"
-			},
-			{
-				"command": "byokBridge.showCrashDiagnostics",
-				"title": "Devin BYOK Bridge: 显示崩溃诊断日志"
-			},
-			{
-				"command": "byokBridge.showLocalOutput",
-				"title": "Devin BYOK Local: 显示输出日志"
-			},
-			{
-				"command": "byokBridge.fullStopLocal",
-				"title": "Devin BYOK Local: 完全停止（6778）"
-			},
-			{
-				"command": "byokBridge.fullStopCascade",
-				"title": "Devin BYOK Cascade: 完全停止（6678）"
-			},
-			{
-				"command": "byokBridge.configureSsh",
-				"title": "Devin BYOK Bridge: 配置当前 SSH 主机"
-			},
-			{
-				"command": "byokBridge.removeSsh",
-				"title": "Devin BYOK Bridge: 移除当前 SSH 主机配置"
-			},
-			{
-				"command": "byokBridge.installPatch",
-				"title": "Devin BYOK Bridge: 安装补丁"
-			},
-			{
-				"command": "byokBridge.uninstallPatch",
-				"title": "Devin BYOK Bridge: 卸载补丁"
-			}
-		]
-	}
+  "name": "devin-byok-bridge",
+  "displayName": "Devin Model Gateway",
+  "description": "将 Devin 的 Cascade 与 Local 模型请求路由至自定义 OpenAI 兼容或 Anthropic 原生 API，支持多供应商、模型绑定、协议适配、上下文管理和 Remote SSH。",
+  "version": "1.1.46",
+  "publisher": "byok-dev",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "main": "./extension.js",
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:byokBridge.prepareSshHost"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "icon": "media/logo.png",
+  "scripts": {
+    "check:patch": "node scripts/check-patch-syntax.js",
+    "check:code": "node scripts/check-code-integrity.js",
+    "test:ssh": "node scripts/test-ssh-remote-support.cjs",
+    "test:public-errors": "node scripts/test-public-errors.cjs",
+    "test:output-health": "node scripts/test-output-health.cjs",
+    "test:runtime-guards": "node scripts/test-runtime-guards.cjs",
+    "test:identity": "node scripts/test-session-identity.cjs",
+    "test:managed-session-routing": "node scripts/test-managed-session-routing.cjs",
+    "test:native-compatibility": "node scripts/test-native-picker-compat.cjs",
+    "test:provider-stream": "node scripts/test-provider-stream.cjs",
+    "test:responses": "node scripts/test-responses-adapter.cjs",
+    "test:capabilities": "node scripts/test-provider-capability-checks.cjs && node scripts/test-provider-capability-transport.cjs",
+    "test:native-audit": "node scripts/test-native-adaptation-audit.cjs",
+    "audit:native": "node scripts/audit-native-adaptation.cjs",
+    "probe:capabilities": "node scripts/probe-provider-capabilities.cjs",
+    "test:acceptance-guard": "node scripts/test-acceptance-guard.cjs",
+    "test:acceptance-transport": "node scripts/test-acceptance-transport.cjs",
+    "test:image-continuity": "node scripts/test-image-and-continuity.cjs",
+    "test:plan-hooks": "node scripts/test-native-plan-continuity.cjs",
+    "test:reasoning": "node scripts/test-reasoning-controls.cjs",
+    "test:inline-reasoning": "node scripts/test-inline-reasoning.cjs",
+    "test:subagents": "node scripts/test-native-subagents.cjs",
+    "test:mcp": "node scripts/test-native-mcp.cjs",
+    "package": "node scripts/package.js"
+  },
+  "dependencies": {
+    "node-forge": "^1.3.1",
+    "sharp": "0.34.5"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "javascript-obfuscator": "^4.1.1"
+  },
+  "contributes": {
+    "configuration": {
+      "title": "Devin Model Gateway",
+      "properties": {
+        "byokBridge.ssh.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "在 Remote SSH 窗口中配置 Linux 远端到本机 6778 的安全回环通道。"
+        },
+        "byokBridge.ssh.remotePort": {
+          "type": "integer",
+          "default": 16778,
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "Linux 远端用于连接本机 BYOK 代理的回环端口。修改后需重新连接 SSH。"
+        },
+        "byokBridge.ssh.remoteCaPath": {
+          "type": "string",
+          "default": "",
+          "description": "Linux 远端 CA 公共证书路径。留空时根据远端工作区路径推断用户主目录。"
+        },
+        "byokBridge.ssh.remoteAcpRegistryPath": {
+          "type": "string",
+          "default": "",
+          "description": "Linux 远端 ACP 注册表路径。留空时使用当前 Devin 通道的 ACP 本地注册表（Devin - Next 为 ~/.windsurf-next/acp/registry.json）。"
+        },
+        "byokBridge.updates.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "仅云端版支持在线更新；本地版始终使用离线安装包更新。"
+        },
+        "byokBridge.updates.autoDownload": {
+          "type": "boolean",
+          "default": true,
+          "description": "后台下载已签名的新版本；确认安装后再提示重载窗口。"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "byokBridge",
+          "title": "Devin Model Gateway",
+          "icon": "media/logo.svg"
+        }
+      ]
+    },
+    "views": {
+      "byokBridge": [
+        {
+          "type": "webview",
+          "id": "byokBridge.panel",
+          "name": "中转接入面板",
+          "contextualTitle": "Devin Model Gateway"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "byokBridge.openPanel",
+        "title": "Devin Model Gateway: 打开控制面板"
+      },
+      {
+        "command": "byokBridge.refreshLocalModels",
+        "title": "Devin Model Gateway: 刷新 Local 原生模型列表"
+      },
+      {
+        "command": "byokBridge.installPlanHooks",
+        "title": "Devin Model Gateway: 恢复原生计划流程"
+      },
+      {
+        "command": "byokBridge.removePlanHooks",
+        "title": "Devin Model Gateway: 移除原生计划连续性 Hooks"
+      },
+      {
+        "command": "byokBridge.installNativeSubagents",
+        "title": "Devin Model Gateway: 安装原生子代理配置"
+      },
+      {
+        "command": "byokBridge.removeNativeSubagents",
+        "title": "Devin Model Gateway: 移除原生子代理配置"
+      },
+      {
+        "command": "byokBridge.configureSubagentRoute",
+        "title": "Devin Model Gateway: 配置子代理模型路由"
+      },
+      {
+        "command": "byokBridge.showOutput",
+        "title": "Devin Model Gateway: 显示输出日志"
+      },
+      {
+        "command": "byokBridge.showCrashDiagnostics",
+        "title": "Devin Model Gateway: 显示崩溃诊断日志"
+      },
+      {
+        "command": "byokBridge.showLocalOutput",
+        "title": "Devin Model Gateway: 显示 Local 输出日志"
+      },
+      {
+        "command": "byokBridge.fullStopLocal",
+        "title": "Devin Model Gateway: 完全停止 Local（6778）"
+      },
+      {
+        "command": "byokBridge.fullStopCascade",
+        "title": "Devin Model Gateway: 完全停止 Cascade（6678）"
+      },
+      {
+        "command": "byokBridge.configureSsh",
+        "title": "Devin Model Gateway: 配置当前 SSH 主机"
+      },
+      {
+        "command": "byokBridge.removeSsh",
+        "title": "Devin Model Gateway: 移除当前 SSH 主机配置"
+      },
+      {
+        "command": "byokBridge.installPatch",
+        "title": "Devin Model Gateway: 安装补丁"
+      },
+      {
+        "command": "byokBridge.uninstallPatch",
+        "title": "Devin Model Gateway: 卸载补丁"
+      },
+      {
+        "command": "byokBridge.checkForUpdates",
+        "title": "Devin Model Gateway: 检查插件更新"
+      }
+    ]
+  }
 }

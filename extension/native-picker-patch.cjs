@@ -10,6 +10,7 @@ const LEGACY_SESSIONS_MARKER = "BYOK_NATIVE_PICKER_SESSIONS_V5";
 const OLDER_SESSIONS_MARKER = "BYOK_NATIVE_PICKER_SESSIONS_V4";
 const OLDEST_SESSIONS_MARKER = "BYOK_NATIVE_PICKER_SESSIONS_V3";
 const EARLIEST_SESSIONS_MARKER = "BYOK_NATIVE_PICKER_SESSIONS_V2";
+const NEXT_310_SESSIONS_MARKER = "BYOK_NATIVE_PICKER_SESSIONS_NEXT_310";
 
 // Serialized into the installed component. Keep every dependency explicit: the
 // only captured variables are component state and the native protobuf class Ii.
@@ -482,6 +483,20 @@ const sessionsDefinitionsV9 = sessionsDefinitionsV8.map(definition => {
   }
   return definition;
 });
+// Register the actual ACP send with the local router. The picker can retain an
+// old cascadeId after a conversation resumes, so selection-time IDs alone are
+// insufficient. This hook uses the active ACP session and the submitted text.
+const sessionsDefinitionsV10 = sessionsDefinitionsV9.map(definition => {
+  if (definition.name !== "picker-state") return definition;
+  const before = 'return __byokPersistQueue.current},[])';
+  const after = 'try{let __byokWrites=window.__byokPickerWrites??=new Map;__byokWrites.set(String(__byokSelection.sessionId||""),__byokPersistQueue.current);while(__byokWrites.size>128)__byokWrites.delete(__byokWrites.keys().next().value)}catch(_){}return __byokPersistQueue.current},[])';
+  if (!definition.replacement.includes(before)) throw new Error("Sessions prompt identity persistence anchor missing");
+  return { ...definition, replacement: definition.replacement.replace(before, after) };
+}).concat({
+  name: "prompt-identity",
+  before: 'return await r(p,{method:"session/prompt",params:y}),!0',
+  replacement: 'if(String(a||"").startsWith("acp/devin-cli/")){let __byokPending=window.__byokPickerWrites?.get(String(a));if(__byokPending&&!(await __byokPending)?.ok)throw Error("模型选择保存失败，请重新选择后发送");let __byokPrompt=Array.isArray(v)?v.filter(__byokPart=>__byokPart&&__byokPart.type==="text"&&typeof __byokPart.text==="string").map(__byokPart=>__byokPart.text):typeof v==="string"?v:[],__byokAbort=new AbortController(),__byokDeadline=setTimeout(()=>__byokAbort.abort(),3000);try{let __byokResponse=await fetch("http://127.0.0.1:6778/__byok/prompt-identity",{method:"POST",signal:__byokAbort.signal,cache:"no-store",credentials:"omit",headers:{"content-type":"application/json"},body:JSON.stringify({sessionId:String(a),prompt:__byokPrompt})}),__byokResult=await __byokResponse.json();if(!__byokResponse.ok||!__byokResult||__byokResult.ok!==!0)throw Error("模型会话关联失败："+String(__byokResult&&__byokResult.reason||"local bridge unavailable"))}finally{clearTimeout(__byokDeadline)}}return await r(p,{method:"session/prompt",params:y}),!0'
+});
 // 1.0.102 briefly shipped a wider cascade-id lookup while retaining the V7
 // marker.  Keep an exact recipe for that installed shape so a 1.0.98-based
 // build can validate and remove it transactionally before applying its own
@@ -518,7 +533,8 @@ function buildV102CascadeCompatibility(definitions) {
 }
 const sessionsDefinitionsV7From102 = buildV102CascadeCompatibility(sessionsDefinitionsV7);
 const sessionsDefinitionsV8From102 = buildV102CascadeCompatibility(sessionsDefinitionsV8);
-const sessionsEdits = materialize(sessionsDefinitionsV9, SESSIONS_MARKER);
+const sessionsEditsV9Installed = materialize(sessionsDefinitionsV9, SESSIONS_MARKER);
+const sessionsEdits = materialize(sessionsDefinitionsV10, SESSIONS_MARKER);
 const sessionsEditsV8From102 = materialize(sessionsDefinitionsV8From102, SESSIONS_MARKER);
 const sessionsEditsV7Installed = materialize(sessionsDefinitionsV7, SESSIONS_MARKER);
 const sessionsEditsV7From102 = materialize(sessionsDefinitionsV7From102, SESSIONS_MARKER);
@@ -548,6 +564,7 @@ const PREVIOUS_EDITOR_MARKER = "BYOK_NATIVE_PICKER_EDITOR_V4";
 const LEGACY_EDITOR_MARKER = "BYOK_NATIVE_PICKER_EDITOR_V3";
 const OLDER_EDITOR_MARKER = "BYOK_NATIVE_PICKER_EDITOR_V2";
 const OLDEST_EDITOR_MARKER = "BYOK_NATIVE_PICKER_EDITOR_V1";
+const NEXT_310_EDITOR_MARKER = "BYOK_NATIVE_PICKER_EDITOR_NEXT_310";
 function renameAdapterIdentifiers(source, names) {
   return source.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_$][\w$]*/g,
     token => Object.prototype.hasOwnProperty.call(names, token) ? names[token] : token);
@@ -624,11 +641,143 @@ editorDefinitions.push({ name: "session-new-config-options-new", before: session
 const providerPrefetch = 'let t=(0,eo9.normalizeConfigOptionsToV1)(m.configOptions??[]);n(eLw({providerId:e,configOptions:t}))';
 const providerPrefetchPatched = 'let t=(0,eo9.normalizeConfigOptionsToV1)(m.configOptions??[]);t.some(e=>"model"===e.id)||t.push({id:"model",category:"model",name:"Model",type:"select",currentValue:"",options:[]}),t.some(e=>"mode"===e.id)||t.push({id:"mode",name:"Mode",type:"select",currentValue:"plan",options:[{value:"plan",name:"Plan"},{value:"code",name:"Code"}]}),n(eLw({providerId:e,configOptions:t}))';
 editorDefinitions.push({ name: "provider-config-options-prefetch", before: providerPrefetch, replacement: providerPrefetchPatched });
-const editorEdits = materialize(editorDefinitions, EDITOR_MARKER);
+// An SSH connector may be listed before its ACP process has supplied any
+// config options. The composer reads the empty provider cache in that state,
+// so session creation and prefetch fallbacks have no opportunity to run yet.
+// Only seed the missing rows for a selected Devin connector on an SSH host.
+const editorEditsV5BeforeSsh = materialize(editorDefinitions, EDITOR_MARKER);
 // Exact 1.0.102 Editor recipe.  It paired the wider cascade lookup above with
 // a single SSH composer fallback instead of the four 1.0.98 fallback edits.
 const composerConfigSelectorFrom102 = 'let nc4=[];function nc5(){let e=tCR(),t=t6E(),n=tCk(e=>null!==e.acp.pendingSwitchTarget),r=tCk(e=>e.acp.cachedConfigOptionsByProvider[t]);return n?r??e??nc4:e?.length?e:r??nc4}';
 const composerConfigSelectorPatchedFrom102 = 'let nc4=[];const __byokSshFallbackOptions=[{id:"model",category:"model",name:"Model",type:"select",currentValue:"",options:[]},{id:"mode",name:"Mode",type:"select",currentValue:"plan",options:[{value:"plan",name:"Plan"},{value:"code",name:"Code"}]}];function nc5(){let e=tCR(),t=t6E(),n=tCk(e=>null!==e.acp.pendingSwitchTarget),r=tCk(e=>e.acp.cachedConfigOptionsByProvider[t]),i=n?r??e??nc4:e?.length?e:r??nc4,o=tCW().find(e=>e&&e.id===t),a=!!(o&&o.location&&("ssh"===o.location.kind||"ssh-remote"===o.location.kind));if(!a||!eT8(t))return i;let s=Array.isArray(i)?i.slice():[],l=new Set(s.map(e=>String(e&&e.id||"")));if(l.has("model")&&l.has("mode"))return i;return l.has("model")||s.push(__byokSshFallbackOptions[0]),l.has("mode")||s.push(__byokSshFallbackOptions[1]),s}';
+// In a Remote SSH window the selected connector can still have kind="local":
+// it is local to the remote extension host. Read the chat client's own remote
+// context instead of assuming that every SSH workspace uses a kind="ssh"
+// connector (that kind belongs to the separate RemoteHosts feature).
+const composerConfigSelectorRemoteContext = composerConfigSelectorPatchedFrom102.replace(
+  'if(!a||!eT8(t))return i;',
+  'let c=MD(),h=!!(c&&c.isRemoteConnection&&String(c.remoteName||"").startsWith("ssh-remote"));if(!(a||h)||!eT8(t))return i;'
+);
+const editorEditsV5BeforeRemoteContext = materialize([
+  ...editorDefinitions,
+  { name: "composer-config-selector-fallback", before: composerConfigSelectorFrom102, replacement: composerConfigSelectorPatchedFrom102 },
+], EDITOR_MARKER);
+editorDefinitions.push({ name: "composer-config-selector-fallback", before: composerConfigSelectorFrom102, replacement: composerConfigSelectorRemoteContext });
+const editorEdits = materialize(editorDefinitions, EDITOR_MARKER);
+
+// Devin Next 3.10.1035 (internal 1.126.0-next) changed both minified picker
+// bundles. Keep a separate, exact recipe: older installations retain their
+// existing adapters, and a later Devin update fails closed if an anchor moves.
+const next310SessionNames = { Ie:"_e", Ge:"ze", ze:"Ge", ut:"dt", q:"V",
+  IL:"wL", PW:"RW", $ce:"Yce", IZn:"_Zn", Ws:"Ws", _G:"IG", Yce:"Xce", Wj:"Hj" };
+const next310EditorNames = { nug:"nub", ncW:"nc0", nFA:"nFO",
+  "e$n":"e$o", "eL_":"eLA", eLv:"eLb" };
+const next310PickerNames = new Set([
+  "picker-state", "picker-rows", "picker-row-deps", "picker-selected-value",
+  "picker-effects", "picker-selection", "picker-selection-deps",
+]);
+const next310SessionDefinitionsInstalled = sessionsDefinitionsV9.filter(d => next310PickerNames.has(d.name)).map(d => {
+  const replacement = renameAdapterIdentifiers(d.replacement, next310SessionNames);
+  if (d.name === "picker-state") {
+    const inserted = replacement.slice(replacement.indexOf("[__byokNativeSnapshot"), replacement.indexOf(",{unacknowledgedModelUids"));
+    if (!inserted.startsWith("[__byokNativeSnapshot") || inserted.length < 100) throw new Error("Devin Next Sessions state recipe is incomplete");
+    const before = "{unacknowledgedModelUids:ot}=_Zn()";
+    return { name:d.name, before, replacement:inserted + "," + before };
+  }
+  if (d.name === "picker-rows") return { name:d.name,
+    before:"gt=_e?$e:void 0,Rt=_e,Dt=_e&&$e.length>0,yt=(0,m.useMemo)(()=>{if(!ae)return[];if(Dt){",
+    replacement };
+  if (d.name === "picker-row-deps") return { name:d.name, before:"[dt,ae,Dt,$e]),Kt=", replacement };
+  if (d.name === "picker-selection") return { name:d.name,
+    before:"let ei=(0,m.useCallback)(qo=>{if(h&&!Ws.getState().acp.pendingSwitchTarget?Ws.dispatch(IG({sessionId:h,configId:on,value:qo.modelUid})):Ws.dispatch(Xce({configId:on,value:qo.modelUid})),ze)",
+    replacement };
+  if (d.name === "picker-selection-deps") return { name:d.name, before:"[h,on,ze]),Ti=", replacement };
+  return { name:d.name, before:d.before, replacement };
+});
+const next310SessionDefinitions = next310SessionDefinitionsInstalled.map(definition => {
+  if (definition.name !== "picker-state") return definition;
+  const before = 'return __byokPersistQueue.current},[])';
+  const after = 'try{let __byokWrites=window.__byokPickerWrites??=new Map;__byokWrites.set(String(__byokSelection.sessionId||""),__byokPersistQueue.current);while(__byokWrites.size>128)__byokWrites.delete(__byokWrites.keys().next().value)}catch(_){}return __byokPersistQueue.current},[])';
+  if (!definition.replacement.includes(before)) throw new Error("Devin Next Sessions prompt identity anchor missing");
+  return { ...definition, replacement: definition.replacement.replace(before, after) };
+}).concat(sessionsDefinitionsV10.find(definition => definition.name === "prompt-identity"));
+const next310EditorDefinitionsInstalled = editorDefinitions.filter(d => next310PickerNames.has(d.name)).map(d => {
+  const before = renameAdapterIdentifiers(d.before, next310EditorNames);
+  const replacement = renameAdapterIdentifiers(d.replacement, next310EditorNames);
+  if (d.name === "picker-selection") return { name:d.name,
+    before:"let W=(0,tZ.useCallback)(e=>{if(i&&!e$o.getState().acp.pendingSwitchTarget?e$o.dispatch(eLA({sessionId:i,configId:N,value:e.modelUid})):e$o.dispatch(eLb({configId:N,value:e.modelUid})),b)",
+    replacement };
+  return { name:d.name, before, replacement };
+});
+// Next 3.10 renamed the composer selector independently of the model picker.
+// Keep the verified seven-edit recipe available for upgrades, and seed rows
+// before an SSH connector has returned session/new config options.
+const next310ComposerNames = { nc4:"nue", nc5:"nut", tCR:"tCD", t6E:"t6x",
+  tCk:"tCI", tCW:"tCZ", eT8:"eT9" };
+const next310EditorDefinitionsWithModeFallback = next310EditorDefinitionsInstalled.concat({
+  name: "composer-config-selector-fallback",
+  before: renameAdapterIdentifiers(composerConfigSelectorFrom102, next310ComposerNames),
+  replacement: renameAdapterIdentifiers(composerConfigSelectorRemoteContext, next310ComposerNames),
+});
+// Model rows can be supplied by the BYOK catalog. Modes must come from the
+// selected ACP provider: retain its IDs, labels, defaults, and native handlers.
+const composerConfigSelectorNativeModes = 'let nc4=[];const __byokSshFallbackOptions=[{id:"model",category:"model",name:"Model",type:"select",currentValue:"",options:[]}];function nc5(){let e=tCR(),t=t6E(),n=tCk(e=>null!==e.acp.pendingSwitchTarget),r=tCk(e=>e.acp.cachedConfigOptionsByProvider[t]),i=n?r??e??nc4:e?.length?e:r??nc4,o=tCW().find(e=>e&&e.id===t),a=!!(o&&o.location&&("ssh"===o.location.kind||"ssh-remote"===o.location.kind)),c=MD(),h=!!(c&&c.isRemoteConnection&&String(c.remoteName||"").startsWith("ssh-remote"));if(!(a||h)||!eT8(t))return i;return Array.isArray(i)&&i.some(e=>e&&"select"===e.type&&("model"===e.category||"model"===e.id))?i:[...(Array.isArray(i)?i:[]),__byokSshFallbackOptions[0]]}';
+const next310EditorDefinitions = next310EditorDefinitionsInstalled.concat({
+  name: "composer-config-selector-fallback",
+  before: renameAdapterIdentifiers(composerConfigSelectorFrom102, next310ComposerNames),
+  replacement: renameAdapterIdentifiers(composerConfigSelectorNativeModes, next310ComposerNames),
+});
+const next310SessionEditsInstalled = materialize(next310SessionDefinitionsInstalled, NEXT_310_SESSIONS_MARKER);
+const next310SessionEdits = materialize(next310SessionDefinitions, NEXT_310_SESSIONS_MARKER);
+const next310EditorEdits = materialize(next310EditorDefinitions, NEXT_310_EDITOR_MARKER);
+const next310EditorEditsInstalled = materialize(next310EditorDefinitionsInstalled, NEXT_310_EDITOR_MARKER);
+const next310EditorPriorRecipes = [
+  materialize(next310EditorDefinitionsWithModeFallback, NEXT_310_EDITOR_MARKER),
+  next310EditorEditsInstalled,
+];
+
+const next311Profiles = require("./native-picker-next-311.cjs").buildProfiles(
+  sessionsDefinitionsV10, renameAdapterIdentifiers, materialize);
+
+function exactPriorRecipe(code, marker, priorEdits) {
+  const candidates = Array.isArray(priorEdits[0]) ? priorEdits : [priorEdits];
+  for (const candidate of candidates) {
+    try { validateSessionsPatched(code, marker, candidate); return candidate; }
+    catch {}
+  }
+  throw new Error("Devin Next prior picker patch is incomplete or incompatible");
+}
+
+function patchExactNext310(code, marker, edits, priorEdits = null) {
+  if (code.includes(marker)) {
+    try {
+      validateSessionsPatched(code, marker, edits);
+      return { changed:false, code };
+    } catch (error) {
+      if (!priorEdits) throw error;
+      const previous = exactPriorRecipe(code, marker, priorEdits);
+      for (const edit of previous) code = code.replace(edit.after, edit.before);
+      if (code.includes(marker)) throw new Error("Devin Next prior picker removal verification failed");
+    }
+  }
+  for (const edit of edits) if (count(code, edit.before) !== 1) {
+    throw new Error("Devin Next 3.10 picker compatibility check failed: " + edit.name);
+  }
+  for (const edit of edits) code = code.replace(edit.before, edit.after);
+  validateSessionsPatched(code, marker, edits);
+  return { changed:true, code };
+}
+function unpatchExactNext310(code, marker, edits, priorEdits = null) {
+  if (!code.includes(marker)) return { changed:false, code };
+  try { validateSessionsPatched(code, marker, edits); }
+  catch (error) {
+    if (!priorEdits) throw error;
+    edits = exactPriorRecipe(code, marker, priorEdits);
+  }
+  for (const edit of edits) code = code.replace(edit.after, edit.before);
+  if (code.includes(marker)) throw new Error("Devin Next picker removal verification failed");
+  return { changed:true, code };
+}
 const editorDefinitionsV5From102 = buildEditorDefinitions(sessionsDefinitionsV8From102);
 editorDefinitionsV5From102.push({ name: "composer-config-selector-fallback", before: composerConfigSelectorFrom102, replacement: composerConfigSelectorPatchedFrom102 });
 const editorEditsV5From102 = materialize(editorDefinitionsV5From102, EDITOR_MARKER);
@@ -666,8 +815,28 @@ const editorEditsV5Installed = materialize(buildEditorDefinitions(sessionsDefini
 // after Sessions validates but Editor reports an incompatible current marker.
 const editorDefinitionsV5BeforeCascade = buildEditorDefinitions(sessionsDefinitionsV7BeforeCascade);
 const editorEditsV5BeforeCascade = materialize(editorDefinitionsV5BeforeCascade, EDITOR_MARKER);
+const priorEditorRecipes = [
+  editorEditsV5BeforeRemoteContext,
+  editorEditsV5BeforeSsh,
+  editorEditsV5Installed,
+  editorEditsV5From102,
+  editorEditsV5ProviderPrefetch,
+  editorEditsV5ProviderPrefetchLegacy,
+  editorEditsV5SessionFallback,
+  editorEditsV5UnconditionalFallback,
+  editorEditsV5ConditionalFallback,
+  editorEditsV5Current,
+  editorEditsV5BeforeCascade,
+];
 function isEditorPickerPatched(code) {
-  try { validateSessionsPatched(String(code||""),EDITOR_MARKER,editorEdits); return true; } catch { return false; }
+  try {
+    const source = String(code || "");
+    const current = next311Profiles.find(profile => profile.marker.includes("EDITOR") && source.includes(profile.marker));
+    if (current) { validateSessionsPatched(source, current.marker, current.edits); return true; }
+    if (source.includes(NEXT_310_EDITOR_MARKER)) validateSessionsPatched(source, NEXT_310_EDITOR_MARKER, next310EditorEdits);
+    else validateSessionsPatched(source, EDITOR_MARKER, editorEdits);
+    return true;
+  } catch { return false; }
 }
 function patchEditorPicker(code) {
   if (code.includes(EDITOR_MARKER)) {
@@ -675,29 +844,12 @@ function patchEditorPicker(code) {
       validateSessionsPatched(code,EDITOR_MARKER,editorEdits);
       return {changed:false,code};
     } catch {
-      let prior = editorEditsV5Installed;
-      try { validateSessionsPatched(code,EDITOR_MARKER,prior); }
-      catch {
-        prior = editorEditsV5From102;
-        try { validateSessionsPatched(code,EDITOR_MARKER,prior); }
-        catch {
-          prior = editorEditsV5ProviderPrefetch;
-          try { validateSessionsPatched(code,EDITOR_MARKER,prior); }
-          catch {
-            prior = editorEditsV5SessionFallback;
-            try { validateSessionsPatched(code,EDITOR_MARKER,prior); }
-            catch {
-              prior = editorEditsV5UnconditionalFallback;
-              try { validateSessionsPatched(code,EDITOR_MARKER,prior); }
-              catch {
-                prior = editorEditsV5ConditionalFallback;
-                try { validateSessionsPatched(code,EDITOR_MARKER,prior); }
-                catch { prior = editorEditsV5Current; validateSessionsPatched(code,EDITOR_MARKER,prior); }
-              }
-            }
-          }
-        }
+      let prior = null;
+      for (const recipe of priorEditorRecipes) {
+        try { validateSessionsPatched(code,EDITOR_MARKER,recipe); prior = recipe; break; }
+        catch {}
       }
+      if (!prior) throw new Error("Previous Editor picker patch is incompatible");
       for (const edit of prior) code=code.replace(edit.after,edit.before);
       if (code.includes(EDITOR_MARKER)) throw new Error("Previous Editor picker patch removal verification failed");
     }
@@ -735,29 +887,12 @@ function unpatchEditorPicker(code) {
   const editsToRemove = previous ? previousEditorEdits : legacy ? legacyEditorEdits : older ? olderEditorEdits : oldest ? oldestEditorEdits : editorEdits;
   let exactEdits = editsToRemove;
   if (marker === EDITOR_MARKER) {
-    try { validateSessionsPatched(code,marker,exactEdits); }
-    catch {
-      try { exactEdits=editorEditsV5Installed; validateSessionsPatched(code,marker,exactEdits); }
-      catch {
-        try { exactEdits=editorEditsV5From102; validateSessionsPatched(code,marker,exactEdits); }
-        catch {
-          try { exactEdits=editorEditsV5ProviderPrefetch; validateSessionsPatched(code,marker,exactEdits); }
-          catch {
-            try { exactEdits=editorEditsV5ProviderPrefetchLegacy; validateSessionsPatched(code,marker,exactEdits); }
-            catch {
-              try { exactEdits=editorEditsV5SessionFallback; validateSessionsPatched(code,marker,exactEdits); }
-              catch {
-                try { exactEdits=editorEditsV5ConditionalFallback; validateSessionsPatched(code,marker,exactEdits); }
-                catch {
-                  try { exactEdits=editorEditsV5Current; validateSessionsPatched(code,marker,exactEdits); }
-                  catch { exactEdits=editorEditsV5BeforeCascade; validateSessionsPatched(code,marker,exactEdits); }
-                }
-              }
-            }
-          }
-        }
-      }
+    let matched = false;
+    for (const recipe of [editorEdits, ...priorEditorRecipes]) {
+      try { validateSessionsPatched(code,marker,recipe); exactEdits=recipe; matched=true; break; }
+      catch {}
     }
+    if (!matched) throw new Error("Editor picker patch is incompatible");
   } else {
     validateSessionsPatched(code,marker,exactEdits);
   }
@@ -773,8 +908,12 @@ function validateSessionsPatched(code, marker = SESSIONS_MARKER, edits = session
 }
 
 function isSessionsPickerPatched(code) {
+  const current = next311Profiles.find(profile => profile.marker.includes("SESSIONS") && String(code || "").includes(profile.marker));
+  if (current) { try { validateSessionsPatched(code, current.marker, current.edits); return true; } catch { return false; } }
   try {
-    validateSessionsPatched(String(code || ""));
+    const source = String(code || "");
+    if (source.includes(NEXT_310_SESSIONS_MARKER)) validateSessionsPatched(source, NEXT_310_SESSIONS_MARKER, next310SessionEdits);
+    else validateSessionsPatched(source);
     return true;
   } catch {
     return false;
@@ -786,15 +925,18 @@ function patchSessionsPicker(code) {
       validateSessionsPatched(code);
       return { changed: false, code };
     } catch {
-      let prior = sessionsEditsV8Installed;
+      let prior = sessionsEditsV9Installed;
       try { validateSessionsPatched(code, SESSIONS_MARKER, prior); }
       catch {
-        try { prior = sessionsEditsV7Installed; validateSessionsPatched(code, SESSIONS_MARKER, prior); }
+        try { prior = sessionsEditsV8Installed; validateSessionsPatched(code, SESSIONS_MARKER, prior); }
         catch {
-          try { prior = sessionsEditsV8From102; validateSessionsPatched(code, SESSIONS_MARKER, prior); }
+          try { prior = sessionsEditsV7Installed; validateSessionsPatched(code, SESSIONS_MARKER, prior); }
           catch {
-            try { prior = sessionsEditsV7From102; validateSessionsPatched(code, SESSIONS_MARKER, prior); }
-            catch { prior = sessionsEditsV7BeforeCascade; validateSessionsPatched(code, SESSIONS_MARKER, prior); }
+            try { prior = sessionsEditsV8From102; validateSessionsPatched(code, SESSIONS_MARKER, prior); }
+            catch {
+              try { prior = sessionsEditsV7From102; validateSessionsPatched(code, SESSIONS_MARKER, prior); }
+              catch { prior = sessionsEditsV7BeforeCascade; validateSessionsPatched(code, SESSIONS_MARKER, prior); }
+            }
           }
         }
       }
@@ -841,14 +983,17 @@ function unpatchSessionsPicker(code) {
   if (!previous && !legacy && !older && !oldest && !earliest) {
     try { validateSessionsPatched(code, marker, edits); }
     catch {
-      try { edits = sessionsEditsV8Installed; validateSessionsPatched(code, marker, edits); }
+      try { edits = sessionsEditsV9Installed; validateSessionsPatched(code, marker, edits); }
       catch {
-        try { edits = sessionsEditsV7Installed; validateSessionsPatched(code, marker, edits); }
+        try { edits = sessionsEditsV8Installed; validateSessionsPatched(code, marker, edits); }
         catch {
-          try { edits = sessionsEditsV8From102; validateSessionsPatched(code, marker, edits); }
+          try { edits = sessionsEditsV7Installed; validateSessionsPatched(code, marker, edits); }
           catch {
-            try { edits = sessionsEditsV7From102; validateSessionsPatched(code, marker, edits); }
-            catch { edits = sessionsEditsV7BeforeCascade; validateSessionsPatched(code, marker, edits); }
+            try { edits = sessionsEditsV8From102; validateSessionsPatched(code, marker, edits); }
+            catch {
+              try { edits = sessionsEditsV7From102; validateSessionsPatched(code, marker, edits); }
+              catch { edits = sessionsEditsV7BeforeCascade; validateSessionsPatched(code, marker, edits); }
+            }
           }
         }
       }
@@ -878,6 +1023,22 @@ function unpatchLegacyPicker(code) {
 }
 function patchNativePicker(code) {
   if (typeof code !== "string") throw new TypeError("Native picker source must be a string");
+  if (!next311Profiles.some(profile => code.includes(profile.marker)) && code.includes('BYOK_NATIVE_PICKER_')) {
+    const restored = unpatchNativePicker(code);
+    if (restored.changed) {
+      const updated = patchNativePicker(restored.code);
+      return {code:updated.code,changed:updated.code!==code};
+    }
+  }
+  const current = next311Profiles.find(profile => code.includes(profile.marker)) ||
+    next311Profiles.find(profile => code.includes(profile.component) && profile.edits.every(edit => count(code, edit.before) === 1));
+  if (current) return patchExactNext310(code, current.marker, current.edits, current.priorEdits);
+  if (code.includes(NEXT_310_EDITOR_MARKER) || code.includes('nqW.displayName="AcpModelSelect"')) {
+    return patchExactNext310(code, NEXT_310_EDITOR_MARKER, next310EditorEdits, next310EditorPriorRecipes);
+  }
+  if (code.includes(NEXT_310_SESSIONS_MARKER) || code.includes('fcs.displayName="AcpModelSelect"')) {
+    return patchExactNext310(code, NEXT_310_SESSIONS_MARKER, next310SessionEdits, next310SessionEditsInstalled);
+  }
   if (code.includes('nqB.displayName="AcpModelSelect"')) {
     const hasEditorMarker = code.includes(EDITOR_MARKER) || code.includes(PREVIOUS_EDITOR_MARKER) || code.includes(LEGACY_EDITOR_MARKER) || code.includes(OLDER_EDITOR_MARKER) || code.includes(OLDEST_EDITOR_MARKER);
     if (code.includes(EDITOR_MARKER)) {
@@ -890,6 +1051,14 @@ function patchNativePicker(code) {
   if (code.includes("mcs=(0,m.memo)") && code.includes("AcpModelSelect")) return patchSessionsPicker(code);
   if (code.includes(MARKER)) { validatePatched(code); return { changed: false, code }; }
   if (code.includes(LEGACY_MARKER)) code = unpatchLegacyPicker(code).code;
+  // Unknown modern builds used to fall through to the oldest Workbench
+  // recipe and report its first missing anchor ("selected-value"). That
+  // obscures the actual problem and cannot identify the remote host build.
+  if (!code.includes('jzo=(0,o.memo)(({disabled:d})=>{let{logEvent:s,userStatus:m}=H1()')) {
+    const error = new Error("当前 Devin 构建尚未适配原生模型菜单，请提供 Devin 和插件版本及兼容性诊断");
+    error.code = "BYOK_NATIVE_PICKER_UNSUPPORTED";
+    throw error;
+  }
   for (const edit of edits) if (count(code, edit.before) !== 1) {
     throw new Error("Native picker compatibility check failed: " + edit.name);
   }
@@ -898,6 +1067,10 @@ function patchNativePicker(code) {
 }
 function unpatchNativePicker(code) {
   if (typeof code !== "string") throw new TypeError("Native picker source must be a string");
+  const current = next311Profiles.find(profile => code.includes(profile.marker));
+  if (current) return unpatchExactNext310(code, current.marker, current.edits, current.priorEdits);
+  if (code.includes(NEXT_310_EDITOR_MARKER)) return unpatchExactNext310(code, NEXT_310_EDITOR_MARKER, next310EditorEdits, next310EditorPriorRecipes);
+  if (code.includes(NEXT_310_SESSIONS_MARKER)) return unpatchExactNext310(code, NEXT_310_SESSIONS_MARKER, next310SessionEdits, next310SessionEditsInstalled);
   if (code.includes(EDITOR_MARKER) || code.includes(PREVIOUS_EDITOR_MARKER) || code.includes(LEGACY_EDITOR_MARKER) || code.includes(OLDER_EDITOR_MARKER) || code.includes(OLDEST_EDITOR_MARKER)) return unpatchEditorPicker(code);
   if (code.includes(SESSIONS_MARKER) || code.includes(PREVIOUS_SESSIONS_MARKER) || code.includes(LEGACY_SESSIONS_MARKER) || code.includes(OLDER_SESSIONS_MARKER) || code.includes(OLDEST_SESSIONS_MARKER) || code.includes(EARLIEST_SESSIONS_MARKER)) return unpatchSessionsPicker(code);
   if (!code.includes(MARKER)) {
@@ -909,4 +1082,8 @@ function unpatchNativePicker(code) {
   return { changed: true, code };
 }
 
-module.exports = { MARKER, SESSIONS_MARKER, PREVIOUS_SESSIONS_MARKER, LEGACY_SESSIONS_MARKER, OLDER_SESSIONS_MARKER, OLDEST_SESSIONS_MARKER, EARLIEST_SESSIONS_MARKER, EDITOR_MARKER, PREVIOUS_EDITOR_MARKER, LEGACY_EDITOR_MARKER, OLDER_EDITOR_MARKER, OLDEST_EDITOR_MARKER, patchNativePicker, unpatchNativePicker, patchSessionsPicker, unpatchSessionsPicker, isSessionsPickerPatched, patchEditorPicker, unpatchEditorPicker, isEditorPickerPatched };
+function resolveNativePickerCompatibility(source, options = {}) {
+  const clean = unpatchNativePicker(source).code;
+  return require('./native-picker-compat.cjs').select(clean, next311Profiles, options);
+}
+module.exports = { MARKER, SESSIONS_MARKER, PREVIOUS_SESSIONS_MARKER, LEGACY_SESSIONS_MARKER, OLDER_SESSIONS_MARKER, OLDEST_SESSIONS_MARKER, EARLIEST_SESSIONS_MARKER, NEXT_310_SESSIONS_MARKER, EDITOR_MARKER, PREVIOUS_EDITOR_MARKER, LEGACY_EDITOR_MARKER, OLDER_EDITOR_MARKER, OLDEST_EDITOR_MARKER, NEXT_310_EDITOR_MARKER, patchNativePicker, unpatchNativePicker, patchSessionsPicker, unpatchSessionsPicker, isSessionsPickerPatched, patchEditorPicker, unpatchEditorPicker, isEditorPickerPatched, resolveNativePickerCompatibility, nativePickerProfiles: () => next311Profiles };

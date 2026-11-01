@@ -1,3 +1,4 @@
+import _byokPublicErrors from "./public-errors.cjs";
 var Li = Object.create;
 var Qo = Object.defineProperty;
 var Bi = Object.getOwnPropertyDescriptor;
@@ -263,6 +264,8 @@ var Rs = Zo((_0x2567a7, _0x11b873) => {
   };
 });
 import _0x5d4ade from "node:http2";
+import inlineReasoning from "./inline-reasoning.cjs";
+import providerStreams from "./provider-stream.cjs";
 import _0x3e1fad from "node:https";
 import _0x412940 from "node:https";
 import _0x4712c4 from "node:http";
@@ -2909,7 +2912,9 @@ var qr = /([\/\\][\w.\-]+\.[a-zA-Z0-9]{1,6}\b|\berror\b|\bfail(ed)?\b|\bexceptio
 var on = new Map();
 var rn = new Map();
 function ec() {
-  let _0x523bae = String(process.env.BYOK_HISTORY_COMPRESS ?? "1").trim().toLowerCase();
+  // Preserve Devin's native history by default. Legacy proxy-side compression
+  // remains available as an explicit compatibility opt-in.
+  let _0x523bae = String(process.env.BYOK_HISTORY_COMPRESS ?? "0").trim().toLowerCase();
   return _0x523bae !== "0" && _0x523bae !== "false" && _0x523bae !== "off" && _0x523bae !== "no";
 }
 function to() {
@@ -3569,6 +3574,21 @@ async function gc(_0x3c5608, _0x3a0aec, _0x2b8a36 = {}) {
       summaryMode: "none"
     };
   }
+  if (!_0x217e01) {
+    return {
+      entries: _0x15bf41,
+      cacheEntries: _0x31cef9,
+      tokens: _0x3b3f43,
+      toolCompacted: 0,
+      summarized: 0,
+      dropped: 0,
+      threshold: _0xdf9c55,
+      target: _0x362f0c,
+      stages: [],
+      reason: _0x3b3f43 > _0x18796e ? "native-fidelity-over-limit" : "native-fidelity",
+      summaryMode: "none"
+    };
+  }
   if (_0x217e01) {
     let _0x17402e = Zr(_0x15bf41, _0xd0b12, _0x17bc48);
     let _0x2057ed = Math.max(0, _0x15bf41.length - _0x17402e);
@@ -3590,7 +3610,7 @@ async function gc(_0x3c5608, _0x3a0aec, _0x2b8a36 = {}) {
       _0x399c4e.push("tool");
     }
   }
-  if (!_0x217e01 || _0x3b3f43 <= _0xdf9c55) {
+  if (_0x3b3f43 <= _0xdf9c55) {
     if (_0x3b3f43 > _0x18796e) {
       let _0x137c0e = nn(_0x15bf41, _0x18796e);
       _0x4c78e4 = _0x137c0e.dropped;
@@ -4113,7 +4133,7 @@ function rs(_0x381aa1, _0x12d486) {
 import _0x33d3be from "node:crypto";
 import _0x2fce7e from "node:zlib";
 var io = 160;
-var ss = "Devin BYOK Bridge";
+var ss = "Devin Model Gateway";
 var ao = "[" + ss + "]";
 var is = "[XY Devin Byok]";
 function Sc(_0x4f59cf) {
@@ -4416,6 +4436,7 @@ function Oc(_0x5b481f) {
   }
 }
 function Pt(_0x57c391, _0x1052ed) {
+  _0x1052ed = _byokPublicErrors.forManaged(_0x1052ed);
   let _0x137530 = yc(_o(_0x1052ed));
   if (_0x137530.length <= io) {
     return [rs(_0x57c391, _0x137530)];
@@ -4588,36 +4609,8 @@ function ds(_0x42b936) {
   }
   return 0;
 }
-function fs(_0x3915d4) {
-  let _0x5c6ec9 = [];
-  let _0xd72fa = _0x3915d4.split("\n");
-  let _0x1f1c6f = null;
-  let _0x2c6a5d = [];
-  for (let _0x5c993c of _0xd72fa) {
-    if (_0x5c993c.startsWith("event: ")) {
-      _0x1f1c6f = _0x5c993c.slice(7).trim();
-    } else if (_0x5c993c.startsWith("data: ")) {
-      _0x2c6a5d.push(_0x5c993c.slice(6));
-    } else if (_0x5c993c.startsWith("data:")) {
-      _0x2c6a5d.push(_0x5c993c.slice(5));
-    } else if (_0x5c993c === "" && _0x1f1c6f !== null) {
-      let _0x5446f5 = _0x2c6a5d.join("\n");
-      try {
-        _0x5c6ec9.push({
-          event: _0x1f1c6f,
-          data: JSON.parse(_0x5446f5)
-        });
-      } catch {
-        _0x5c6ec9.push({
-          event: _0x1f1c6f,
-          data: _0x5446f5
-        });
-      }
-      _0x1f1c6f = null;
-      _0x2c6a5d = [];
-    }
-  }
-  return _0x5c6ec9;
+function fs(input) {
+  return providerStreams.parseSseBuffer(input, { flush: true }).events;
 }
 var mn = class {
   constructor(_0x5b0905, _0x1a61b8, _0x6040ad = null, _0x224b80 = true) {
@@ -4980,48 +4973,8 @@ function Bc(_0x18d660) {
   }
   return 0;
 }
-function ps(_0x8fdc44) {
-  let _0x4c73eb = [];
-  let _0x416eeb = _0x8fdc44.split("\n");
-  for (let _0x473094 of _0x416eeb) {
-    if (!_0x473094.startsWith("data: ")) {
-      continue;
-    }
-    let _0x1dcc95 = _0x473094.slice(6).trim();
-    if (_0x1dcc95 === "[DONE]") {
-      _0x4c73eb.push({
-        done: true,
-        type: "done",
-        data: null
-      });
-      continue;
-    }
-    try {
-      let _0xa479ba = JSON.parse(_0x1dcc95);
-      if (_0xa479ba.error) {
-        _0x4c73eb.push({
-          done: false,
-          type: "chat.completions.error",
-          data: _0xa479ba
-        });
-        continue;
-      }
-      if (Array.isArray(_0xa479ba.choices)) {
-        _0x4c73eb.push({
-          done: false,
-          type: "chat.completions.chunk",
-          data: _0xa479ba
-        });
-        continue;
-      }
-      _0x4c73eb.push({
-        done: false,
-        type: _0xa479ba.type || "",
-        data: _0xa479ba
-      });
-    } catch {}
-  }
-  return _0x4c73eb;
+function ps(input) {
+  return providerStreams.parseSseBuffer(input, { flush: true }).events;
 }
 var _n = class {
   constructor(_0x543526, _0x8e278f, _0x167c02 = null, _0x31e523 = true) {
@@ -5036,7 +4989,7 @@ var _n = class {
     this._itemTypes = {};
     this._itemPhases = {};
     this._pendingText = "";
-    this._thinkPlaceholderBuffer = "";
+    this._inlineReasoning = inlineReasoning.createInlineReasoningSplitter();
     this._reasoningPlaceholderBuffer = "";
     this._reasoningStreamStarted = false;
     this._reasoningBuffer = "";
@@ -5240,11 +5193,10 @@ var _n = class {
     }
     let _0x2b4d51 = [];
     let _0x37f491 = [];
-    this._flushReasoningPlaceholder(_0x2b4d51);
     let _0x22d5eb = this._filterThinkPlaceholderText("", true);
-    if (_0x22d5eb) {
-      this._handleOutputTextDelta(_0x22d5eb, _0x2b4d51, true);
-    }
+    if (_0x22d5eb.reasoning) this._handleReasoningDelta(_0x22d5eb.reasoning, _0x2b4d51);
+    if (_0x22d5eb.text) this._handleOutputTextDelta(_0x22d5eb.text, _0x2b4d51, true);
+    this._flushReasoningPlaceholder(_0x2b4d51);
     if (this._errorMessage) {
       this._restoreInterceptedText(_0x2b4d51);
       for (let _0x5c5a6e of Pt(this._messageId, this._errorMessage)) {
@@ -5300,9 +5252,8 @@ var _n = class {
     }
     this._stopReason ||= "stop";
     if (this._tokenCount === 0 && _0x37f491.length === 0 && this._reasoningBuffer) {
-      E(y.DETAIL, "仅 reasoning，提升为可见文本");
-      this._emitTextChunk(this._reasoningBuffer, _0x2b4d51);
-      this._reasoningBuffer = "";
+      E(y.DETAIL, "仅 reasoning，无可见正文");
+      this._emitTextChunk("模型仅返回了推理内容，请重试。", _0x2b4d51);
     }
     if (this._stopReason === "tool_calls" && _0x37f491.length === 0) {
       E(y.TOOL, "stop=tool_calls 但未解析到调用，降级为 stop");
@@ -5384,58 +5335,13 @@ var _n = class {
       this._emitReasoningChunk(_0x2472ae, _0x1cbce5);
     }
   }
-  _filterThinkPlaceholderText(_0xca7502, _0x28da7f = false) {
-    let _0x3337f2 = "" + this._thinkPlaceholderBuffer + String(_0xca7502 || "");
-    this._thinkPlaceholderBuffer = "";
-    let _0x43c83c = "";
-    let _0x41020b = "<think>";
-    let _0x4bf1ea = "</think>";
-    while (_0x3337f2) {
-      let _0x322d0c = _0x3337f2.toLowerCase();
-      let _0x4c377a = _0x322d0c.indexOf(_0x41020b);
-      if (_0x4c377a === -1) {
-        if (_0x28da7f) {
-          _0x43c83c += _0x3337f2;
-          break;
-        }
-        let _0x2fde08 = 0;
-        let _0x28ca4d = Math.min(_0x3337f2.length, _0x41020b.length - 1);
-        for (let _0x301766 = _0x28ca4d; _0x301766 > 0; _0x301766--) {
-          if (_0x41020b.startsWith(_0x322d0c.slice(-_0x301766))) {
-            _0x2fde08 = _0x301766;
-            break;
-          }
-        }
-        _0x43c83c += _0x3337f2.slice(0, _0x3337f2.length - _0x2fde08);
-        this._thinkPlaceholderBuffer = _0x3337f2.slice(_0x3337f2.length - _0x2fde08);
-        break;
-      }
-      _0x43c83c += _0x3337f2.slice(0, _0x4c377a);
-      _0x3337f2 = _0x3337f2.slice(_0x4c377a);
-      let _0x205fcf = _0x3337f2.toLowerCase().indexOf(_0x4bf1ea, _0x41020b.length);
-      if (_0x205fcf !== -1) {
-        let _0x388bc7 = _0x205fcf + _0x4bf1ea.length;
-        let _0x5cd839 = _0x3337f2.slice(_0x41020b.length, _0x205fcf);
-        if (!/^\s*(?:\.{3,}|…+)\s*$/.test(_0x5cd839)) {
-          _0x43c83c += _0x3337f2.slice(0, _0x388bc7);
-        }
-        _0x3337f2 = _0x3337f2.slice(_0x388bc7);
-        continue;
-      }
-      let _0x40fbe9 = _0x3337f2.slice(_0x41020b.length).match(/^([\s.…]*)(.*)$/s);
-      let _0xc742ef = _0x40fbe9?.[2] || "";
-      let _0x1872c0 = !!_0x40fbe9 && (!_0xc742ef || _0x4bf1ea.startsWith(_0xc742ef.toLowerCase()));
-      if (!_0x28da7f && _0x1872c0) {
-        this._thinkPlaceholderBuffer = _0x3337f2;
-      } else {
-        _0x43c83c += _0x3337f2;
-      }
-      break;
-    }
-    return _0x43c83c;
+  _filterThinkPlaceholderText(delta, final = false) {
+    return this._inlineReasoning.push(delta, final);
   }
   _handleOutputTextDelta(_0x24158d, _0x3cbef7, _0x5131f7 = false) {
-    let _0x57b2ed = _0x5131f7 ? String(_0x24158d || "") : this._filterThinkPlaceholderText(_0x24158d);
+    let _0x3ab4d5 = _0x5131f7 ? { text: String(_0x24158d || ""), reasoning: "" } : this._filterThinkPlaceholderText(_0x24158d);
+    if (_0x3ab4d5.reasoning) this._handleReasoningDelta(_0x3ab4d5.reasoning, _0x3cbef7);
+    let _0x57b2ed = _0x3ab4d5.text;
     if (!_0x57b2ed) {
       return;
     }
@@ -7882,7 +7788,7 @@ function Ql(_0x34fd61 = null) {
   };
 }
 
-// [self-use] __BYOK_VISION_PATCH__
+// [compat] __BYOK_VISION_PATCH__
 function _byokGuessVision(model, flag) {
   if (flag === true) return true;
   if (flag === false) return false;
@@ -9128,8 +9034,14 @@ function ru(_0x5a2654, _0x554598, {
     }, _0xf39b5b);
     return true;
   };
+  const _byokStreamScope = providerStreams.createCascadeScope(_0x554598, _0x3eecf8, {
+    source: 'cascade', requestId: _0x5da3e9, model: _0x528841,
+    sessionId: _0x2bd1f2?.sessionKey || _0x4a6a59?.sessionKey || _0x4a6a59?.cascadeId || '',
+    onRecord: record => E(y.DETAIL, '[BYOK-CALL] ' + JSON.stringify(record))
+  });
   let _0x24e204 = () => {
     _0x3dd0c7 += 1;
+    const _byokAttempt = _byokStreamScope.begin('anthropic', _0x3dd0c7);
     let _0x720278 = new mn(_0x5da3e9, _0x528841, _0x199151, _0xc2003e);
     let _0x45f413;
     _0x58219c = _0x529fbf.request({
@@ -9222,6 +9134,7 @@ function ru(_0x5a2654, _0x554598, {
       function _0x5bacc6(_0x81ad05) {
         let _0x265554 = fs(_0x81ad05 + "\n\n");
         for (let _0x2ed77f of _0x265554) {
+          if (!_byokAttempt.observe(_0x2ed77f)) continue;
           let _0x4f1ba2 = _0x720278.processEvent(_0x2ed77f);
           if (_0x720278.isDone) {
             let _0x195256 = _0x39959c(_0x720278, _0x4f1ba2);
@@ -9251,12 +9164,13 @@ function ru(_0x5a2654, _0x554598, {
       }
       _0x418da1();
       _0x535642.on("data", _0x3be05f => {
+        if (!_byokAttempt.active()) return;
         if (_0x28acbf) {
           _0x28acbf.mark("first_upstream_chunk", "bytes=" + Buffer.byteLength(_0x3be05f));
         }
         _0x418da1();
         _0x3c33f2 += _0x3be05f;
-        let _0x46730e = _0x3c33f2.split("\n\n");
+        let _0x46730e = _0x3c33f2.split(/\r?\n\r?\n/);
         _0x3c33f2 = _0x46730e.pop();
         for (let _0x2070ac of _0x46730e) {
           _0x5bacc6(_0x2070ac);
@@ -9269,28 +9183,13 @@ function ru(_0x5a2654, _0x554598, {
         _0xe94b85 = true;
         _0x2c07ba();
         _0x23f8ee();
+        if (!_byokAttempt.active()) return;
+        if (!_0x372198 && !_byokAttempt.call.hasTerminal() && !_0x720278.hasErrorEvent()) {
+          _0x3eecf8.fail(Z("上游流中断", _byokAttempt.call.eofError()));
+          return;
+        }
         if (!_0x372198 && (_0x3c33f2.trim() && _0x5bacc6(_0x3c33f2), !_0x372198 && (!!_0x720278.isDone || !_0x720278.hasErrorEvent() || !_0x2faea7(_0x720278.getStreamErrorHint())))) {
-          if (!_0x720278.isDone && !_0x554598.writableEnded) {
-            if (_0x720278.hasMeaningfulOutput && !_0x720278.stopReason) {
-              E(y.UPSTREAM, "Anthropic 流被上游提前关闭（疑似截断），追加不完整提示");
-              _0x3eecf8.flushPendingText();
-              _0x3eecf8.safeWrite(Ce(Ze(_0x5da3e9, STREAM_TRUNCATED_NOTICE, 0)));
-              _0x720278.markIncomplete();
-            } else {
-              E(y.DETAIL, "Anthropic 流未收到 message_stop，强制结束");
-            }
-            let _0x3a6f9e = _0x720278.processEvent({
-              event: "message_stop",
-              data: {}
-            });
-            let _0x4e38b0 = _0x39959c(_0x720278, _0x3a6f9e);
-            _0x3a6f9e = _0x4e38b0.chunks;
-            Yt(_0x3eecf8, _0x720278, _0x3a6f9e);
-            if (_0x4e38b0.continue) {
-              _0x34438e(_0x720278);
-              return;
-            }
-          }
+          // message_stop is required; never synthesize upstream success.
           _0x1bd279(_0x720278, _0x720278.stopReason || "end");
         }
       });
@@ -9298,6 +9197,7 @@ function ru(_0x5a2654, _0x554598, {
         _0xe94b85 = true;
         _0x2c07ba();
         _0x23f8ee();
+        if (!_byokAttempt.active()) return;
         if (!_0x3eecf8.wasClosedByClient()) {
           ce("Anthropic 流被中止");
           _0x3eecf8.fail(Z("上游流中断", "Anthropic 连接被意外终止"));
@@ -9307,15 +9207,18 @@ function ru(_0x5a2654, _0x554598, {
         _0xe94b85 = true;
         _0x2c07ba();
         _0x23f8ee();
+        if (!_byokAttempt.active()) return;
         if (!_0x3eecf8.wasClosedByClient()) {
           ce("Anthropic 流错误: " + _0x3c2eb4.message);
           _0x3eecf8.fail(Z("上游流错误", _0x3c2eb4.message));
         }
       });
     });
+    _byokAttempt.attach(_0x58219c);
     _0x45f413 = Ei(_0x58219c, _0x3eecf8, Al, "Anthropic");
     _0x58219c.on("error", _0x389143 => {
       clearTimeout(_0x45f413);
+      if (!_byokAttempt.active()) return;
       if (_0x3eecf8.wasClosedByClient() && (_0x389143.code === "ECONNRESET" || _0x389143.code === "ECONNABORTED") || _0x3eecf8.wasFinalized()) {
         return;
       }
@@ -9369,7 +9272,7 @@ function su(_0x2a5c98, _0x4c931c, {
     requestedModel: _0xca3d94
   });
   let _0x1cb04e = mi(_0x5f1204.apiPath);
-  let _0xce9d48 = _0x1cb04e ? au(_0x3b3fce, _0xe8b53f) : iu(_0x3b3fce, _0xe8b53f);
+  let _0xce9d48 = inlineReasoning.sanitizeInlineReasoningHistory(_0x1cb04e ? au(_0x3b3fce, _0xe8b53f) : iu(_0x3b3fce, _0xe8b53f)).messages;
   let _0x103697 = nu(_0x1830d2, _0x31c667);
   let _0x5c472d = _0x103697 ? xi(_0x31c667, _0x14bd0f, "OpenAI") : undefined;
   let _0x5160a0 = _0x1cb04e ? {
@@ -9515,8 +9418,14 @@ function su(_0x2a5c98, _0x4c931c, {
     }, _0x1aa1a1);
     return true;
   };
+  const _byokStreamScope = providerStreams.createCascadeScope(_0x4c931c, _0x789155, {
+    source: 'cascade', requestId: _0x133106, model: _0x5582bf,
+    sessionId: _0x363177?.sessionKey || _0x1ca167?.sessionKey || _0x1ca167?.cascadeId || '',
+    onRecord: record => E(y.DETAIL, '[BYOK-CALL] ' + JSON.stringify(record))
+  });
   let _0x29ce81 = () => {
     _0x32cf3c += 1;
+    const _byokAttempt = _byokStreamScope.begin(_0x1cb04e ? 'openai' : 'openai_responses', _0x32cf3c);
     let _0x3e4d00 = new _n(_0x133106, _0x5582bf, _0x86b8f7, _0x103697);
     if (_0x103697 && _0x31c667) {
       _0x3e4d00.setAllowedTools(_0x31c667.map(_0x38e725 => _0x38e725.name));
@@ -9613,6 +9522,7 @@ function su(_0x2a5c98, _0x4c931c, {
       function _0x239181(_0x496653) {
         let _0x1cde73 = ps(_0x496653 + "\n");
         for (let _0x289938 of _0x1cde73) {
+          if (!_byokAttempt.observe(_0x289938)) continue;
           let _0x388874 = _0x3e4d00.processEvent(_0x289938);
           if (_0x2ed973 && _0x3e4d00.hasReasoningOutput) {
             _0x2ed973.mark("first_reasoning_delta", "event=" + (_0x289938.type || "done"));
@@ -9640,12 +9550,13 @@ function su(_0x2a5c98, _0x4c931c, {
       }
       _0x27d4aa();
       _0x204399.on("data", _0x31e0f8 => {
+        if (!_byokAttempt.active()) return;
         if (_0x2ed973) {
           _0x2ed973.mark("first_upstream_chunk", "bytes=" + Buffer.byteLength(_0x31e0f8));
         }
         _0x27d4aa();
         _0x3ba006 += _0x3b90f0.write(_0x31e0f8);
-        let _0x500f30 = _0x3ba006.split("\n\n");
+        let _0x500f30 = _0x3ba006.split(/\r?\n\r?\n/);
         _0x3ba006 = _0x500f30.pop();
         for (let _0x347e5b of _0x500f30) {
           _0x239181(_0x347e5b);
@@ -9655,30 +9566,22 @@ function su(_0x2a5c98, _0x4c931c, {
         _0x570de7 = true;
         _0x2dade2();
         _0x1053b9();
+        if (!_byokAttempt.active()) return;
         _0x3ba006 += _0x3b90f0.end();
         if (_0x3ba006.trim()) {
           _0x239181(_0x3ba006);
+        }
+        if (!_byokAttempt.call.hasTerminal() && !_0x3e4d00.hasErrorEvent()) {
+          _0x789155.fail(Z("上游流中断", _byokAttempt.call.eofError()));
+          return;
         }
         if (!!_0x3e4d00.isDone || !_0x3e4d00.hasErrorEvent() || !_0x412cbb(_0x3e4d00.getStreamErrorHint())) {
           if (_0x2ed973) {
             _0x2ed973.mark("upstream_eof", "attempt=" + _0x32cf3c);
           }
           if (!_0x3e4d00.isDone && !_0x4c931c.writableEnded) {
-            if (_0x3e4d00.hasMeaningfulOutput && !_0x3e4d00.stopReason) {
-              E(y.UPSTREAM, "OpenAI 流被上游提前关闭（疑似截断），追加不完整提示");
-              _0x789155.flushPendingText();
-              _0x789155.safeWrite(Ce(Ze(_0x133106, STREAM_TRUNCATED_NOTICE, 0)));
-              _0x3e4d00.markIncomplete();
-            } else if (_0x3e4d00.stopReason) {
-              E(y.DETAIL, "OpenAI 流 EOF，已补结束帧 · stop=" + _0x3e4d00.stopReason);
-            } else {
-              E(y.DETAIL, _0x1cb04e ? "OpenAI ChatCompletions 流 EOF，未收到 [DONE]，已补结束帧" : "OpenAI Responses 流 EOF，未收到 response.completed，已补结束帧");
-            }
-            Yt(_0x789155, _0x3e4d00, _0x3e4d00.processEvent({
-              done: true,
-              type: "done",
-              data: null
-            }));
+            // A Chat finish_reason is valid even without a separate [DONE].
+            Yt(_0x789155, _0x3e4d00, _0x3e4d00.processEvent({ done: true, type: 'done', data: null }));
           }
           qo(_0x789155, _0x3e4d00, "OpenAI", null, {
             model: _0x5582bf,
@@ -9690,6 +9593,7 @@ function su(_0x2a5c98, _0x4c931c, {
         _0x570de7 = true;
         _0x2dade2();
         _0x1053b9();
+        if (!_byokAttempt.active()) return;
         if (!_0x789155.wasClosedByClient()) {
           ce("OpenAI 流被中止");
           _0x1415e6("stream aborted before completion");
@@ -9700,6 +9604,7 @@ function su(_0x2a5c98, _0x4c931c, {
         _0x570de7 = true;
         _0x2dade2();
         _0x1053b9();
+        if (!_byokAttempt.active()) return;
         if (!_0x789155.wasClosedByClient()) {
           ce("OpenAI 流错误: " + _0x5d7972.message);
           _0x1415e6("stream error: " + _0x5d7972.message);
@@ -9707,9 +9612,11 @@ function su(_0x2a5c98, _0x4c931c, {
         }
       });
     });
+    _byokAttempt.attach(_0x46d8d1);
     _0x5edef7 = Ei(_0x46d8d1, _0x789155, Il, "OpenAI");
     _0x46d8d1.on("error", _0x52d5c3 => {
       clearTimeout(_0x5edef7);
+      if (!_byokAttempt.active()) return;
       if (_0x789155.wasClosedByClient() && (_0x52d5c3.code === "ECONNRESET" || _0x52d5c3.code === "ECONNABORTED") || _0x789155.wasFinalized()) {
         return;
       }
