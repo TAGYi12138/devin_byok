@@ -7,6 +7,10 @@ const path = require("node:path");
 const extensionRoot = path.resolve(__dirname, "..");
 const files = [
   "extension.js",
+  "completion-settings.cjs",
+  "completion-panel.cjs",
+  "code-completion-provider.cjs",
+  path.join("server", "code-completion.cjs"),
   "cloud-client.cjs",
   "cloud-dashboard.cjs",
   path.join("server", "public-errors.cjs"),

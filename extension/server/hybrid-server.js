@@ -1,3 +1,4 @@
+import codeCompletion from "./code-completion.cjs";
 import _byokPublicErrors from "./public-errors.cjs";
 var bc = Object.create;
 var Xr = Object.defineProperty;
@@ -7620,6 +7621,7 @@ function Zt(_0x333648, _0x4fd87d, _0x439245, _0xee1986 = _0x309197 => _0x309197)
   }
 }
 function dd(_0x33f765) {
+  if (_0x33f765.completion && typeof _0x33f765.completion === "object") K.completion = { ..._0x33f765.completion };
   if (_0x33f765.defaultModel && typeof _0x33f765.defaultModel == "string") {
     K.defaultModel = _0x33f765.defaultModel;
   }
@@ -12267,6 +12269,10 @@ function yc(_0x2f010b, _0x4605f6, _0x2a7e2a, _0x44b7d2, _0x4b57d5 = "") {
   let _0x3c6fd2 = yo(_0x2f010b.url);
   if (_0x3c6fd2 === "CheckUserMessageRateLimit" || _0x3c6fd2 === "CheckChatCapacity") {
     return !!fc(_0x3c6fd2, _0x2f010b, _0x4605f6, _0x2a7e2a, _0x44b7d2);
+  }
+  if (codeCompletion.METHODS.has(_0x3c6fd2) && codeCompletion.shouldHandle(Te())) {
+    Nn(() => codeCompletion.handle(_0x2f010b, _0x4605f6, _0x2a7e2a, Te()), _0x2f010b, _0x4605f6, _0x44b7d2, "Completions");
+    return true;
   }
   if (_0x3c6fd2 === "GetChatMessage" || _0x3c6fd2 === "GetStreamingExternalChatCompletions") {
     let _0x4cb44f = aa(_0x3c6fd2, _0x2a7e2a, _0x2f010b.headers);

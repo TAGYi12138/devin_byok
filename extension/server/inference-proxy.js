@@ -1,3 +1,4 @@
+import codeCompletion from "./code-completion.cjs";
 import _byokPublicErrors from "./public-errors.cjs";
 var Li = Object.create;
 var Qo = Object.defineProperty;
@@ -6627,6 +6628,7 @@ function Ot(_0x1250b6, _0x3b5f33, _0x468ddb, _0x261af7 = _0x439850 => _0x439850)
   }
 }
 function Xs(_0x32afcb) {
+  if (_0x32afcb.completion && typeof _0x32afcb.completion === "object") q.completion = { ..._0x32afcb.completion };
   if (_0x32afcb.defaultModel && typeof _0x32afcb.defaultModel == "string") {
     q.defaultModel = _0x32afcb.defaultModel;
   }
@@ -9811,245 +9813,8 @@ function au(_0xad4273, _0x61fe88) {
   }
   return _0x3da30f;
 }
-import _0x9fa618 from "node:http";
-import _0x4b95d5 from "node:https";
-import _0x4325f1 from "node:crypto";
-var uu = process.env.XY_DEVICE_ID || "";
-var du = process.env.XY_CLIENT_VERSION || "0.0.0";
-var fu = process.env.COMPLETION_MODEL || "";
-function Xo() {
-  return fu || xe().defaultModel || "claude-sonnet-4-20250514";
-}
-var pu = 256;
-var Oi = 5000;
-var hu = 2000;
-var mu = 500;
-var gu = "You are a precise code completion engine. Return only the code that should be inserted at the cursor position. Do not include explanations, Markdown, backticks, headings, comments about what you changed, or any surrounding prose. Preserve the local coding style and continue the existing code naturally.";
-function Ai(_0x22e392, _0x5b6ecc = 0, _0x25c177 = 0) {
-  if (_0x5b6ecc > 6 || !_0x22e392 || _0x22e392.length === 0) {
-    return [];
-  }
-  let _0x2b0099;
-  try {
-    _0x2b0099 = ge(_0x22e392);
-  } catch {
-    return [];
-  }
-  let _0x126e85 = [];
-  for (let _0x5c6872 of _0x2b0099) {
-    if (_0x5c6872.wireType !== 2) {
-      continue;
-    }
-    let _0x2a6a8c = _0x5c6872.value;
-    if (!_0x2a6a8c || _0x2a6a8c.length === 0) {
-      continue;
-    }
-    let _0x4a5aa8 = _0x2a6a8c.toString("utf8");
-    let _0x4f4680 = (_0x4a5aa8.match(/[\x09\x0a\x0d\x20-\x7e]/g) || []).length / (_0x4a5aa8.length || 1);
-    if (_0x4a5aa8.length > 5 && _0x4f4680 >= 0.8) {
-      _0x126e85.push({
-        text: _0x4a5aa8,
-        field: _0x5c6872.field,
-        parentField: _0x25c177,
-        depth: _0x5b6ecc
-      });
-    }
-    let _0x79aab9 = Ai(_0x2a6a8c, _0x5b6ecc + 1, _0x5c6872.field);
-    _0x126e85.push(..._0x79aab9);
-  }
-  return _0x126e85;
-}
-function _u(_0x491be1) {
-  let _0x4dbf0f = Ai(_0x491be1);
-  let _0x5dbb71 = new Set();
-  let _0xfbb43c = [];
-  for (let _0x427127 of _0x4dbf0f) {
-    if (!_0x5dbb71.has(_0x427127.text)) {
-      _0x5dbb71.add(_0x427127.text);
-      _0xfbb43c.push(_0x427127);
-    }
-  }
-  _0xfbb43c.sort((_0x3e985d, _0x240ebf) => _0x240ebf.text.length - _0x3e985d.text.length);
-  let _0x3f4786 = _0x3d5127 => !(_0x3d5127.length < 10) && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_0x3d5127) && (!/^[0-9a-f]+$/i.test(_0x3d5127) || !(_0x3d5127.length < 80)) && !/^\d+$/.test(_0x3d5127);
-  let _0x178c5c = _0xfbb43c.filter(_0x6295c5 => _0x3f4786(_0x6295c5.text));
-  let _0x23ebfa = _0x178c5c[0]?.text ?? "";
-  let _0x328214 = _0x178c5c[1]?.text ?? "";
-  return {
-    prefix: _0x23ebfa,
-    suffix: _0x328214,
-    allCandidates: _0xfbb43c,
-    codeCandidates: _0x178c5c
-  };
-}
-function Tu(_0x260c7d) {
-  if (!_0x260c7d) {
-    return Buffer.alloc(0);
-  }
-  let _0x5cafde = _0x4325f1.randomUUID();
-  let _0x8d238d = Buffer.concat([le(1, _0x5cafde), le(2, _0x260c7d), $e(12, 2)]);
-  let _0x3e025e = Ae(1, _0x8d238d);
-  return Ae(1, _0x3e025e);
-}
-function Su(_0x2df96b, _0x5b292c) {
-  return new Promise(_0x421e9d => {
-    let _0x21584b = Be().anthropic;
-    if (!_0x21584b.apiKey) {
-      console.error("  [completions] No Anthropic API key set");
-      _0x421e9d("");
-      return;
-    }
-    let _0x2b70e5 = _0x2df96b.slice(-hu);
-    let _0x3a523f = _0x5b292c.slice(0, mu);
-    let _0x4e722d;
-    if (_0x3a523f.length > 0) {
-      _0x4e722d = "Complete the code at the cursor position.\n\n<code_before_cursor>\n" + _0x2b70e5 + "\n</code_before_cursor>\n\n<code_after_cursor>\n" + _0x3a523f + "\n</code_after_cursor>\n\nOutput only the text to insert between the two blocks.";
-    } else {
-      _0x4e722d = "Continue the following code:\n\n" + _0x2b70e5;
-    }
-    let _0x23145e = {
-      model: Xo(),
-      system: gu,
-      messages: [{
-        role: "user",
-        content: _0x4e722d
-      }],
-      stream: false,
-      max_tokens: pu
-    };
-    let _0x4d7d9b = JSON.stringify(_0x23145e);
-    console.log("  [completions] API call: model=" + Xo() + " prefix=" + _0x2b70e5.length + "b suffix=" + _0x3a523f.length + "b");
-    let _0x345bab = _0x21584b.useHttp ? _0x9fa618 : _0x4b95d5;
-    let _0x5f0615 = _0x21584b.parsed.port !== 443 ? _0x21584b.parsed.port : _0x21584b.useHttp ? 80 : 443;
-    let _0x2e3f1d = _0x345bab.request({
-      hostname: _0x21584b.parsed.hostname,
-      port: _0x5f0615,
-      path: _0x21584b.apiPath,
-      method: "POST",
-      rejectUnauthorized: !_0x21584b.useHttp && _0x21584b.parsed.port === 443,
-      headers: {
-        "content-type": "application/json",
-        "anthropic-version": "2023-06-01",
-        "x-api-key": _0x21584b.apiKey,
-        "content-length": Buffer.byteLength(_0x4d7d9b),
-        "x-xy-device-id": uu,
-        "x-xy-client-version": du,
-        "x-xy-timestamp": Date.now().toString(),
-        "x-xy-nonce": _0x4325f1.randomBytes(16).toString("hex"),
-        "x-xy-requested-model": Xo()
-      }
-    }, _0x12a73e => {
-      let _0x9458ec = "";
-      _0x12a73e.setEncoding("utf8");
-      _0x12a73e.on("data", _0x590d17 => {
-        _0x9458ec += _0x590d17;
-      });
-      _0x12a73e.on("end", () => {
-        console.log("  [completions] API status=" + _0x12a73e.statusCode + " body=" + _0x9458ec.slice(0, 400));
-        if (_0x12a73e.statusCode !== 200) {
-          console.error("  [completions] API error " + _0x12a73e.statusCode + ": " + _0x9458ec.slice(0, 200));
-          _0x421e9d("");
-          return;
-        }
-        try {
-          let _0x336365 = JSON.parse(_0x9458ec)?.content?.[0]?.text ?? "";
-          console.log("  [completions] Completion text: " + JSON.stringify(_0x336365.slice(0, 120)));
-          _0x421e9d(_0x336365.trim());
-        } catch (_0x1d9af0) {
-          console.error("  [completions] JSON parse error: " + _0x1d9af0.message);
-          _0x421e9d("");
-        }
-      });
-      _0x12a73e.on("error", _0x52cbe1 => {
-        console.error("  [completions] API response error: " + _0x52cbe1.message);
-        _0x421e9d("");
-      });
-    });
-    _0x2e3f1d.setTimeout(Oi, () => {
-      console.warn("  [completions] API timeout after " + Oi + "ms — returning empty");
-      _0x2e3f1d.destroy();
-      _0x421e9d("");
-    });
-    _0x2e3f1d.on("error", _0x5d7cdf => {
-      if (!_0x5d7cdf.message.includes("socket hang up") && !_0x5d7cdf.message.includes("ECONNRESET")) {
-        console.error("  [completions] API request error: " + _0x5d7cdf.message);
-        _0x421e9d("");
-      }
-    });
-    _0x2e3f1d.end(_0x4d7d9b);
-  });
-}
-async function Ci(_0xc68d64, _0x3f4c88, _0x51c893) {
-  console.log("[completions] GetCompletions (" + (_0x51c893?.length ?? 0) + "b)");
-  let _0x3cd142;
-  try {
-    _0x3cd142 = lt(_0x51c893, _0xc68d64.headers);
-  } catch (_0x2ed824) {
-    console.error("  [completions] unwrapRequest failed: " + _0x2ed824.message);
-    let _0x26bede = Bn(Buffer.alloc(0));
-    _0x3f4c88.writeHead(200, {
-      ...Dn(),
-      "content-length": _0x26bede.length
-    });
-    _0x3f4c88.end(_0x26bede);
-    return;
-  }
-  let _0x25097d = [];
-  try {
-    _0x25097d = ge(_0x3cd142);
-  } catch (_0x38cce3) {
-    console.error("  [completions] parseFields failed: " + _0x38cce3.message);
-  }
-  console.log("  [completions] Top-level fields (" + _0x25097d.length + "):");
-  for (let _0x2c4a59 of _0x25097d) {
-    if (_0x2c4a59.wireType === 0) {
-      console.log("    field " + _0x2c4a59.field + " (varint): " + _0x2c4a59.value);
-    } else if (_0x2c4a59.wireType === 1) {
-      let _0x589e80 = Buffer.isBuffer(_0x2c4a59.value) ? _0x2c4a59.value.toString("hex") : String(_0x2c4a59.value);
-      console.log("    field " + _0x2c4a59.field + " (fixed64): " + _0x589e80);
-    } else if (_0x2c4a59.wireType === 2) {
-      let _0x50c6bc = _0x2c4a59.value;
-      let _0x1d10c1 = _0x50c6bc.toString("utf8");
-      if ((_0x1d10c1.match(/[\x09\x0a\x0d\x20-\x7e]/g) || []).length / (_0x50c6bc.length || 1) >= 0.85) {
-        console.log("    field " + _0x2c4a59.field + " (string/" + _0x50c6bc.length + "b): " + JSON.stringify(_0x1d10c1.slice(0, 120)));
-      } else {
-        console.log("    field " + _0x2c4a59.field + " (bytes/" + _0x50c6bc.length + "b): [binary] " + _0x50c6bc.toString("hex").slice(0, 48));
-      }
-    } else if (_0x2c4a59.wireType === 5) {
-      let _0x10cd94 = Buffer.isBuffer(_0x2c4a59.value) ? _0x2c4a59.value.toString("hex") : String(_0x2c4a59.value);
-      console.log("    field " + _0x2c4a59.field + " (fixed32): " + _0x10cd94);
-    }
-  }
-  let {
-    prefix: _0x43f845,
-    suffix: _0x248637,
-    allCandidates: _0x1976c6,
-    codeCandidates: _0x43535c
-  } = _u(_0x3cd142);
-  console.log("  [completions] String candidates: " + _0x1976c6.length + " total, " + _0x43535c.length + " code-like");
-  for (let _0x20be69 of _0x43535c.slice(0, 6)) {
-    console.log("    [field=" + _0x20be69.field + " parent=" + _0x20be69.parentField + " depth=" + _0x20be69.depth + " len=" + _0x20be69.text.length + "]: " + JSON.stringify(_0x20be69.text.slice(0, 100)));
-  }
-  console.log("  [completions] prefix=" + _0x43f845.length + "b suffix=" + _0x248637.length + "b");
-  if (_0x43f845.length > 0) {
-    console.log("  [completions] prefix tail: " + JSON.stringify(_0x43f845.slice(-100)));
-  }
-  if (_0x248637.length > 0) {
-    console.log("  [completions] suffix head: " + JSON.stringify(_0x248637.slice(0, 100)));
-  }
-  let _0xad9121 = "";
-  if (_0x43f845.length > 0) {
-    _0xad9121 = await Su(_0x43f845, _0x248637);
-  } else {
-    console.log("  [completions] No code context found — skipping API call, returning empty");
-  }
-  let _0x45e71f = Tu(_0xad9121);
-  let _0xab20c5 = Bn(_0x45e71f);
-  console.log("  [completions] Response: proto=" + _0x45e71f.length + "b gzip=" + _0xab20c5.length + "b completion=" + _0xad9121.length + "b");
-  _0x3f4c88.writeHead(200, {
-    ...Dn(),
-    "content-length": _0xab20c5.length
-  });
-  _0x3f4c88.end(_0xab20c5);
+function Ci(req, res, body) {
+  return codeCompletion.handle(req, res, body, xe());
 }
 function Ni(_0x2855ca, _0x5c6798) {
   let _0x3f9287 = process.env[_0x2855ca];
@@ -10297,6 +10062,9 @@ function Jo(_0x214061, _0x2a4667) {
         if (_0x15d413 === "close") {
           _0x214061.on("close", _0x237c51);
         }
+      },
+      removeListener(event, listener) {
+        _0x214061.removeListener(event, listener);
       }
     }
   };
@@ -10308,7 +10076,7 @@ function bi(_0x111c08, _0x130ab4, _0x5f2367, _0x329a1c) {
   } = Jo(_0x130ab4, _0x5f2367);
   try {
     if (_0x329a1c === "completions") {
-      Ci(_0x414690, _0x2bfc75, _0x111c08);
+      Ci(_0x414690, _0x2bfc75, _0x111c08).catch(error => { console.error("[completions] " + error.message); if (!_0x2bfc75.writableEnded) _0x2bfc75.end(); });
     } else {
       gi(_0x414690, _0x2bfc75, _0x111c08);
     }
@@ -10354,7 +10122,7 @@ Rn.on("stream", (_0x2a4d10, _0x42bf7e) => {
     Mu(_0x2a4d10, _0x42bf7e, _0x36a8a0);
     return;
   }
-  if (_0x1ed317 !== "POST" || !_0x2ba3b.includes("connect+proto")) {
+  if (_0x1ed317 !== "POST" || !(_0x2ba3b.includes("connect+proto") || codeCompletion.METHODS.has(_0x3ffe73) && _0x2ba3b.includes("application/proto"))) {
     _0x2a4d10.respond({
       ":status": 404
     });
@@ -10389,7 +10157,7 @@ Rn.on("stream", (_0x2a4d10, _0x42bf7e) => {
     if (!Fn(_0x3ffe73)) {
       console.log("[" + ve() + "] #" + _0x36a8a0 + " " + _0x3ffe73 + " (" + _0x20a563.length + "b)");
     }
-    if (_0x191cf3 === "/exa.api_server_pb.ApiServerService/GetCompletions" || _0x3ffe73 === "GetCompletions") {
+    if (codeCompletion.METHODS.has(_0x3ffe73) && codeCompletion.shouldHandle(xe())) {
       console.log("  -> API (completions)");
       try {
         bi(_0x20a563, _0x2a4d10, _0x42bf7e, "completions");
@@ -10447,7 +10215,7 @@ Rn.listen(Vo, ki, () => {
   console.log("   Bind host: " + ki);
   console.log("   GetChatMessage (BYOK) -> your gateway");
   console.log("   GetChatMessage (other) -> " + qt);
-  console.log("   GetCompletions -> Anthropic API");
+  console.log("   GetCompletions / GetStreamingCompletions -> configured completion provider");
   console.log("   Everything else -> " + qt + "\n");
 });
 for (let e of ["SIGTERM", "SIGINT"]) {

@@ -13074,6 +13074,7 @@ var Ey = K((_0x2086ba, _0x4e3cfe) => {
     }
     async buildRuntimePatch() {
       await this.ensureMigrated();
+      const completion = require("./completion-settings.cjs").read(require("vscode"));
       let _0x1f6bc3 = this._loadStore();
       let _0x33adeb = this.loadBindingsPublic();
       let _0x459737 = this._firstProviderId();
@@ -13145,6 +13146,7 @@ var Ey = K((_0x2086ba, _0x4e3cfe) => {
         cascadeEnabled: _0x262285,
         cascadeBindings: _0xc833b3,
         boundOfficialUids: _0x45cb1b,
+        completion,
         defaultProviderId: _0x459737,
         defaultModel: this.config.read().DEFAULT_MODEL || undefined,
         byokOpus: _0x48704c.byokOpus || "",
@@ -44365,6 +44367,13 @@ var ex = K((_0x3bc777, _0x502a51) => {
           case "getState":
             this._maybeClearStartupPending();
             return _0x30f739(this._retainProvidersAgainstEmpty(await this._getStatePayload()));
+          case "completionSave":
+            {
+              const completion = await require("./completion-settings.cjs").save(_0x1f368c, _0xa3c05.payload, _0x28052c);
+              _0x30f739({ ok: true, completion });
+              this._scheduleRuntimePush();
+              return this.broadcastState();
+            }
           case "nativeSubagentStatus":
             {
               const routing = require("./server/subagent-routing.cjs");
@@ -45721,6 +45730,7 @@ var ex = K((_0x3bc777, _0x502a51) => {
           portServing: _0xa30e3c
         },
         config: _0x2bd91,
+        completion: require("./completion-settings.cjs").read(_0x1f368c),
         local: await this._localPublicState(),
         session: _0x335811.publicSession ? _0x335811.publicSession() : _0x335811.getSession(),
         devinExe: _0x1faa4f.detectDevinExe(),
@@ -46814,6 +46824,11 @@ var ex = K((_0x3bc777, _0x502a51) => {
 .native-mcp-row input[type=checkbox]:disabled{opacity:.55;cursor:wait}
 .native-mcp-row input[type=checkbox]:focus-visible{outline:2px solid var(--vscode-focusBorder,#14b8a6);outline-offset:2px}
 </style>`);
+  {
+    const completionPanel = require("./completion-panel.cjs").attach(_0x59758d, _0x500998);
+    _0x59758d = completionPanel.html;
+    _0x500998 = completionPanel.script;
+  }
   _0x500998 = _0x500998.replaceAll("Devin BYOK Bridge", "Devin Model Gateway").replace('class="brand-mark" aria-hidden="true">B</span>', 'class="brand-mark" aria-hidden="true">G</span>');
   _0x500998 = _0x500998.replace("}, 30000);", "}, (extra && extra.timeoutMs) || 30000);");
   _0x500998 = _0x500998.replace("    box.innerHTML = html;\n    initFbSelects(box);", "    box.innerHTML = html;\n    box.querySelectorAll('.byok-slot-row[data-row-kind=\\\"draft\\\"]').forEach(function(row) { box.insertBefore(row, box.firstChild); });\n    initFbSelects(box);");
@@ -49854,6 +49869,21 @@ async function cU(_0x44ffa9) {
         _0x2fd098.warn("[SUBAGENT] profile removal failed: " + String(error && error.message || error));
         if (interactive) await W.window.showErrorMessage("移除 Devin 原生子代理配置失败：" + String(error && error.message || error));
         return { ok: false, error: String(error && error.message || error) };
+      }
+    }));
+    _0x44ffa9.subscriptions.push(require("./code-completion-provider.cjs").register(W, async () => ({
+      ...await _0x4db9d9.buildRuntimePatch(),
+      localBindings: _0x5a1f50.publicView().bindings || {}
+    }), message => _0x2fd098.info(message)));
+    _0x44ffa9.subscriptions.push(W.commands.registerCommand("byokBridge.configureCompletion", async () => {
+      try {
+        await require("./completion-settings.cjs").configure(W, _0x4db9d9);
+        await _0x8727ec._pushRuntime({ mode: "boot", requireInference: true });
+      } catch (error) { await W.window.showErrorMessage("配置代码补全失败：" + String(error.message || error)); }
+    }));
+    _0x44ffa9.subscriptions.push(W.workspace.onDidChangeConfiguration(event => {
+      if (event.affectsConfiguration("byokBridge.completion")) {
+        _0x8727ec._pushRuntime({ mode: "boot", requireInference: true }).catch(error => _0x2fd098.warn("[completions] " + error.message));
       }
     }));
     _0x44ffa9.subscriptions.push(W.commands.registerCommand("byokBridge.configureSubagentRoute", async (interactive = true) => {

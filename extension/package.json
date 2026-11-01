@@ -2,7 +2,7 @@
   "name": "devin-byok-bridge",
   "displayName": "Devin Model Gateway",
   "description": "将 Devin 的 Cascade 与 Local 模型请求路由至自定义 OpenAI 兼容或 Anthropic 原生 API，支持多供应商、模型绑定、协议适配、上下文管理和 Remote SSH。",
-  "version": "1.1.46",
+  "version": "1.1.50",
   "publisher": "byok-dev",
   "engines": {
     "vscode": "^1.85.0"
@@ -43,7 +43,10 @@
     "test:inline-reasoning": "node scripts/test-inline-reasoning.cjs",
     "test:subagents": "node scripts/test-native-subagents.cjs",
     "test:mcp": "node scripts/test-native-mcp.cjs",
-    "package": "node scripts/package.js"
+    "package": "node scripts/package.js",
+    "test:completion": "node scripts/test-code-completion.cjs",
+    "test:completion-panel": "node scripts/test-completion-panel.cjs",
+    "test:completion-lifecycle": "node scripts/test-completion-lifecycle.cjs"
   },
   "dependencies": {
     "node-forge": "^1.3.1",
@@ -88,6 +91,28 @@
           "type": "boolean",
           "default": true,
           "description": "后台下载已签名的新版本；确认安装后再提示重载窗口。"
+        },
+        "byokBridge.completion.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "通过网关使用已绑定模型进行代码补全；关闭后使用 Devin 官方补全。"
+        },
+        "byokBridge.completion.providerId": {
+          "type": "string",
+          "default": "",
+          "description": "补全供应商 ID。留空自动使用已绑定模型的供应商，可通过“配置代码补全”命令选择。"
+        },
+        "byokBridge.completion.model": {
+          "type": "string",
+          "default": "",
+          "description": "补全模型 ID。留空使用所选供应商已有的模型绑定。建议使用响应较快的代码模型。"
+        },
+        "byokBridge.completion.timeoutMs": {
+          "type": "integer",
+          "default": 15000,
+          "minimum": 100,
+          "maximum": 30000,
+          "description": "每次补全请求的最长等待时间（毫秒）。"
         }
       }
     },
@@ -178,6 +203,10 @@
       {
         "command": "byokBridge.checkForUpdates",
         "title": "Devin Model Gateway: 检查插件更新"
+      },
+      {
+        "command": "byokBridge.configureCompletion",
+        "title": "Devin Model Gateway: 配置代码补全"
       }
     ]
   }

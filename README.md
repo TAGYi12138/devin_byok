@@ -1,63 +1,99 @@
 # Devin Model Gateway
 
-将 Devin 的 Cascade 与 Local 模型请求路由至自定义 OpenAI 兼容或 Anthropic 原生 API，支持多供应商、模型绑定、协议适配、上下文管理和 Remote SSH。
+将 Devin 的 Cascade 与 Devin Local 模型请求接入你自己的 API 供应商，在编辑器里统一管理供应商、模型绑定和代码补全。
 
-## 项目说明
+当前本地插件版本：**1.1.50**。此仓库提供本地插件源码与 Windows 打包脚本。
 
-这是一个 VS Code 扩展，用于统一配置 Devin 的模型供应商和模型绑定。绑定的模型请求由本地网关完成路由与协议适配，未绑定的模型继续使用 Devin 官方服务。
+## 功能
 
-## 使用方法
+- **多供应商接入**：配置 Base URL、API Key 和模型，支持 OpenAI Chat Completions、OpenAI Responses 与 Anthropic Messages 协议。
+- **模型路由**：分别为 Cascade、Local 和默认子代理设置模型绑定。
+- **原生模型菜单**：在支持的 Devin 与 Devin Next 构建中，通过原生菜单选择模型并同步会话状态。
+- **代码补全**：在面板里选择补全供应商、模型和等待时间，在编辑器中显示行内建议。
+- **图片输入**：为支持视觉的模型转发图片，并使用随本地安装包提供的图片库进行预处理。
+- **Remote SSH**：将 Linux 远端工作区的 Local 请求经回环转发连接到 Windows 本机网关。
+- **子代理与 MCP**：安装测试、浏览器验收子代理配置，并按项目管理可选的 MCP 工具。
+- **运行诊断**：查看代理状态、请求日志、Local 输出和崩溃诊断。
 
-1. 安装扩展
-2. 在 VS Code 设置中配置 API 供应商地址
-3. 重启 VS Code 即可使用
+## 使用环境
+
+- Windows x64，已安装兼容的 Devin Desktop 或 Devin Next。
+- 可调用的模型 API 地址、凭据，以及该供应商实际支持的模型 ID。
+- 从源码构建需要 Node.js、npm 和 PowerShell；建议使用 Node.js 22。
+- 使用 Remote SSH 时，需要 Linux 远端主机和允许 TCP 转发的 SSH 服务。
+
+原生菜单适配依赖具体的程序构建及代码结构，详见[兼容版本说明](extension/native-picker-compatibility.md)。不能仅凭相似版本号判断是否兼容。
+
+## 从源码构建
+
+在 PowerShell 中执行：
+
+```powershell
+git clone https://github.com/TAGYi12138/devin_byok.git
+cd devin_byok/extension
+npm install
+npm run check:patch
+npm run check:code
+npm run package
+```
+
+安装包生成在仓库根目录，文件名为 `devin-byok-bridge-1.1.50.vsix`。`npm run package` 调用 `tools/build-vsix.ps1`，并使用 `packaging/` 中的清单文件。
+
+在 Devin 的扩展页面选择“从 VSIX 安装”，选中生成的文件，再重新加载窗口。
+
+## 快速开始
+
+1. 点击侧边栏的 **Devin Model Gateway**，或在命令面板执行 **Devin Model Gateway: 打开控制面板**。
+2. 添加供应商，填写 Base URL、API Key，并选择与供应商一致的 API 协议。
+3. 添加或选择供应商支持的模型，设置模型能力与上下文参数。
+4. 在 Cascade 或 Local 模型绑定中，将需要使用的原生模型入口绑定到目标供应商模型。
+5. 按面板提示启动对应代理、安装必要的原生适配并重新加载窗口，然后新建会话验证。
+
+未绑定的模型继续使用 Devin 官方服务。API Key 与模型配置在使用时填写，不需要写入源码。
+
+## 代码补全
+
+打开控制面板中的 **代码补全** 区块，启用补全，选择供应商和模型后保存。也可以在命令面板中搜索“代码补全”进行配置。优先选择响应较快的代码模型。
+
+| 设置 | 默认值 | 用途 |
+| --- | --- | --- |
+| `byokBridge.completion.enabled` | `true` | 启用网关代码补全 |
+| `byokBridge.completion.providerId` | 空 | 留空自动选择已绑定模型的供应商 |
+| `byokBridge.completion.model` | 空 | 留空使用已有模型绑定 |
+| `byokBridge.completion.timeoutMs` | `15000` | 每次补全的最长等待时间，单位毫秒 |
+
+关闭网关补全后，继续使用 Devin 官方补全。编辑器的行内建议设置也需要启用。
+
+## Remote SSH 与可选工具
+
+先启动本机 Local 网关，再连接 SSH 主机。默认本机端口为 `6778`，远端回环转发端口为 `16778`。首次同步远端配置后，按提示断开并重新连接。
+
+子代理和 MCP 的使用步骤、代理端口及排错入口见[使用说明](extension/readme.md)。可选 MCP 工具可能在首次开启时下载安装依赖，或连接对应的远程服务。
+
+## 目录
+
+```text
+extension/                  插件入口、面板、模型适配和本地代理
+  server/                   协议适配、流处理、补全与图片处理
+  scripts/                  检查、回归测试和打包入口
+  devin-plugin/             子代理配置
+packaging/                  VSIX 清单与内容类型定义
+tools/build-vsix.ps1        Windows 本地打包脚本
+```
+
+## 检查与测试
+
+在 `extension/` 目录中执行：
+
+```powershell
+npm run check:patch
+npm run check:code
+npm run test:completion
+npm run test:completion-lifecycle
+```
+
+其他专项测试入口见 `extension/package.json`。原生适配与浏览器测试可能需要本机 Devin 程序文件或额外的浏览器环境。
 
 ## 许可证
 
-请参考 `extension/LICENSE.txt` 中的许可证条款。
-
-## 主要能力
-
-- 接入 OpenAI 兼容与 Anthropic 原生 API
-- 分别管理 Cascade 与 Local 的模型绑定
-- 支持上下文管理、视觉请求和提示词缓存
-- 历史管理默认采用原生保真模式：Local 普通请求与 Cascade 缓存历史均不再由桥接层预先裁剪；仅在上游明确拒绝上下文长度且尚未产生输出或工具调用时，Local 执行一次压缩重试。可用 `BYOK_LOCAL_HISTORY_FALLBACK=proactive` 临时恢复 Local 旧主动裁剪模式；仅在兼容旧 Cascade 行为时显式设置 `BYOK_HISTORY_COMPRESS=1`。
-- 支持 Windows 本地与 Linux Remote SSH 工作区
-- 支持安装 Devin Local 原生子代理配置，并为 `subagent-default` 请求单独选择 Local 模型绑定
-- 提供代理状态、日志和崩溃诊断
-
-## 1.1.23 验收补救
-
-1.1.23 曾默认依据命令结果检查验收待办，缺少匹配通过证据的 completed 会保留为 pending；通用终端中的常见进程终止命令也会被拦截。1.1.28 起这些补救默认关闭，边界和按需开启方式见 [扩展说明](extension/readme.md)。
-
-本版保留 1.1.22 的流处理改进，并修正“创建浏览器测试”被误判为验收的情况；没有新证据时，重复提交同一完成申请会被停止。
-
-## 1.1.24 验收状态回报
-
-当重复验收待办调用被停止且模型没有留下正文时，网关会在最终回复中列出当前待办状态及最近的验证结果，避免只剩一条抽象警告。
-
-## 1.1.25 阶段待办分类
-
-将“阶段三：扩展页面表单、余额、错误提示和持久化记录”等实现任务与持久化验收分开；补充、完善等实现阶段也不会因标题包含浏览器测试而被误拦截。明确写有运行或验证动作的待办仍需对应通过证据。
-
-## 1.1.26 陈旧证据测试收尾
-
-源码改动后仍拒绝沿用旧验证结果；记录验证结果、清理探针等非验收动作可正常完成。待办因缺少新证据被改回 pending 后，下一次请求会提醒模型继续用户要求的清理与重验步骤，避免只重复提交待办。
-
-## 1.1.27 长任务探索阶段误判修复
-
-修正“检查现有代码、存储结构与测试约定”被误判为测试验收，继而在重复待办调用时截断长任务的问题。探索项目与测试约定不要求测试通过证据；明确运行测试或检查测试结果的待办仍按实际结果验收。
-
-## 1.1.28 原生执行优先
-
-BYOK 继续负责模型路由、协议转换和传输兼容；默认不向 Devin 请求追加语言或执行提示，不改写验收待办，也不拦截 Devin 的终端工具调用。需要排查特定问题时，可分别显式设置 `BYOK_LOCAL_RESPONSE_LANGUAGE_PROMPT=on`、`BYOK_LOCAL_EXECUTION_PROMPTS=on`、`BYOK_LOCAL_ACCEPTANCE_GUARD=on`、`BYOK_LOCAL_PROCESS_GUARD=on`，仅开启所需补救。
-
-自动原生长测脚本默认禁止在共享桌面主机执行。只有在专用、具有进程隔离的虚拟机中，明确设置 `DEVIN_AB_ISOLATED_HOST=1` 才能启动；该开关是运行者声明，不提供或检测系统隔离。日常回归使用只连接本机模拟接口、不执行模型命令的测试。
-
-## 从源码构建本地插件
-
-当前本地版：1.1.46。详细功能说明见 [扩展说明](extension/readme.md)。
-
-在 extension 目录执行 npm install，然后执行 npm run check:patch 和 npm run check:code。返回项目根目录，执行 powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-vsix.ps1，生成本地 VSIX 安装包。
-
-本仓库此次同步仅包含本地插件及构建所需文件。
+使用与分发条件见 [LICENSE.txt](extension/LICENSE.txt)。
